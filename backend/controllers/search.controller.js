@@ -49,7 +49,7 @@ export const search = async (req, res) => {
             .skip((page - 1) * limit)
             .limit(limit)
             .populate("author", "name username profilePic headline")
-            .select("content image author likes comments createdAt tags");
+            .select("content image author likesCount commentsCount createdAt tags");
     }
 
     res.json({ success: true, ...result, page });

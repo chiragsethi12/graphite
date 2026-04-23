@@ -19,7 +19,7 @@ export const getMyAnalytics = async (req, res) => {
         Post.find({ author: userId })
             .sort({ createdAt: -1 })
             .limit(50)
-            .select("content likes comments shares engagementScore createdAt tags"),
+            .select("content likesCount commentsCount shares engagementScore createdAt tags"),
 
         Connection.countDocuments({
             $or: [{ sender: userId }, { recipient: userId }],
@@ -41,15 +41,15 @@ export const getMyAnalytics = async (req, res) => {
     const topPosts = [];
 
     posts.forEach((post) => {
-        totalLikes    += post.likes.length;
-        totalComments += post.comments.length;
+        totalLikes    += post.likesCount || 0;
+        totalComments += post.commentsCount || 0;
         totalShares   += post.shares;
 
         topPosts.push({
             _id:             post._id,
             content:         post.content.slice(0, 120),
-            likes:           post.likes.length,
-            comments:        post.comments.length,
+            likes:           post.likesCount || 0,
+            comments:        post.commentsCount || 0,
             shares:          post.shares,
             engagementScore: post.engagementScore,
             createdAt:       post.createdAt,

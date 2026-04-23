@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, Send, Trash2 } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, Send, Trash2, ChevronDown, Loader2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../../lib/axios";
 import { useAuth } from "../../context/AuthContext";
 import Avatar from "../ui/Avatar";
@@ -20,26 +20,80 @@ function timeAgo(dateStr) {
 export default function PostCard({ post }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [comment, setComment] = useState("");
+  const [commentText, setCommentText] = useState("");
   const [showComments, setShowComments] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
-  const isLiked = post.likes?.some?.((id) => id === user?._id || id?._id === user?._id);
   const isOwner = post.author?._id === user?._id;
+
+  // ─── Like mutation (optimistic) ──────────────────────────────────────────
 
   const likeMutation = useMutation({
     mutationFn: () => api.put(`/posts/${post._id}/like`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["feed"] }),
-  });
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["feed"] });
+      const previousFeed = queryClient.getQueryData(["feed"]);
 
-  const commentMutation = useMutation({
-    mutationFn: () => api.post(`/posts/${post._id}/comment`, { content: comment }),
-    onSuccess: () => {
-      setComment("");
+      queryClient.setQueryData(["feed"], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            posts: page.posts.map((p) => {
+              if (p._id !== post._id) return p;
+              const wasLiked = p.isLiked;
+              return {
+                ...p,
+                isLiked: !wasLiked,
+                likesCount: wasLiked
+                  ? Math.max(0, (p.likesCount || 0) - 1)
+                  : (p.likesCount || 0) + 1,
+              };
+            }),
+          })),
+        };
+      });
+
+      return { previousFeed };
+    },
+    onError: (_err, _vars, context) => {
+      queryClient.setQueryData(["feed"], context.previousFeed);
+      toast.error("Failed to update like");
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
-    onError: () => toast.error("Failed to comment"),
   });
+
+  // ─── Comment mutation ────────────────────────────────────────────────────
+
+  const commentMutation = useMutation({
+    mutationFn: (content) => api.post(`/posts/${post._id}/comment`, { content }),
+    onSuccess: () => {
+      setCommentText("");
+      // Optimistically bump comment count
+      queryClient.setQueryData(["feed"], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            posts: page.posts.map((p) =>
+              p._id === post._id
+                ? { ...p, commentsCount: (p.commentsCount || 0) + 1 }
+                : p
+            ),
+          })),
+        };
+      });
+      // Refresh comments list
+      queryClient.invalidateQueries({ queryKey: ["comments", post._id] });
+    },
+    onError: () => toast.error("Failed to add comment"),
+  });
+
+  // ─── Delete mutation ─────────────────────────────────────────────────────
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/posts/${post._id}`),
@@ -48,6 +102,8 @@ export default function PostCard({ post }) {
       toast.success("Post deleted");
     },
   });
+
+  // ─── Share mutation ──────────────────────────────────────────────────────
 
   const shareMutation = useMutation({
     mutationFn: () => api.post(`/posts/${post._id}/share`, { content: "" }),
@@ -58,13 +114,32 @@ export default function PostCard({ post }) {
     onError: () => toast.error("Failed to share"),
   });
 
+  // ─── Lazy-loaded comments (only when expanded) ──────────────────────────
+
+  const {
+    data: commentsData,
+    isLoading: commentsLoading,
+  } = useQuery({
+    queryKey: ["comments", post._id],
+    queryFn: () => api.get(`/posts/${post._id}/comments?limit=20`).then((r) => r.data),
+    enabled: showComments,
+    staleTime: 30_000,
+  });
+
+  const comments = commentsData?.comments || [];
+
   const handleCopyLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
     toast.success("Link copied!");
   };
 
+  const handleSubmitComment = () => {
+    if (!commentText.trim()) return;
+    commentMutation.mutate(commentText.trim());
+  };
+
   return (
-    <div className="bg-white rounded-card shadow-card border border-surface-border overflow-hidden">
+    <div className="bg-white rounded-card shadow-card border border-surface-border overflow-hidden transition-shadow hover:shadow-card-hover">
       {/* Shared post header */}
       {post.type === "share" && post.sharedPost && (
         <div className="px-4 pt-3 pb-1 text-xs text-gray-400 flex items-center gap-1">
@@ -72,19 +147,20 @@ export default function PostCard({ post }) {
         </div>
       )}
 
-      {/* Author */}
+      {/* Author row */}
       <div className="flex items-start justify-between p-4 pb-2">
-        <Link to={`/profile/${post.author?.username || post.author?._id}`} className="flex items-center gap-3 hover:opacity-80">
+        <Link to={`/profile/${post.author?.username || post.author?._id}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <Avatar src={post.author?.profilePic} name={post.author?.name} size="md" />
           <div>
             <p className="font-semibold text-sm text-gray-900">{post.author?.name}</p>
-            <p className="text-xs text-gray-400">
-              {post.author?.headline} · {timeAgo(post.createdAt)}
+            <p className="text-xs text-gray-400 line-clamp-1">
+              {post.author?.headline && <>{post.author.headline} · </>}
+              {timeAgo(post.createdAt)}
             </p>
           </div>
         </Link>
         <div className="relative">
-          <button onClick={() => setShowMenu((p) => !p)} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100">
+          <button onClick={() => setShowMenu((p) => !p)} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
             <MoreHorizontal size={18} />
           </button>
           {showMenu && (
@@ -140,69 +216,122 @@ export default function PostCard({ post }) {
         </div>
       )}
 
-      {/* Actions bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100">
-        <div className="flex items-center gap-1">
+      {/* Engagement stats bar */}
+      {(post.likesCount > 0 || post.commentsCount > 0) && (
+        <div className="px-4 py-1.5 flex items-center justify-between text-xs text-gray-400">
+          {post.likesCount > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                <Heart size={9} className="text-white fill-white" />
+              </span>
+              {post.likesCount}
+            </span>
+          )}
+          {post.commentsCount > 0 && (
+            <button onClick={() => setShowComments((p) => !p)} className="hover:underline hover:text-gray-600 transition-colors">
+              {post.commentsCount} comment{post.commentsCount !== 1 ? "s" : ""}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex items-center justify-between px-2 py-1 border-t border-gray-100">
+        <div className="flex items-center flex-1">
           <button
+            id={`like-btn-${post._id}`}
             onClick={() => likeMutation.mutate()}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              isLiked ? "text-primary bg-primary-50" : "text-gray-500 hover:bg-gray-100"
+            className={`flex items-center justify-center gap-1.5 flex-1 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+              post.isLiked
+                ? "text-primary bg-primary-50/60"
+                : "text-gray-500 hover:bg-gray-50"
             }`}
           >
-            <Heart size={15} className={isLiked ? "fill-primary" : ""} />
-            {post.likes?.length > 0 && <span>{post.likes.length}</span>}
+            <Heart
+              size={16}
+              className={`transition-transform duration-200 ${post.isLiked ? "fill-primary scale-110" : "scale-100"}`}
+            />
+            <span>{post.isLiked ? "Liked" : "Like"}</span>
           </button>
           <button
             onClick={() => setShowComments((p) => !p)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100 transition-colors"
+            className="flex items-center justify-center gap-1.5 flex-1 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-50 transition-colors"
           >
-            <MessageCircle size={15} />
-            {post.comments?.length > 0 && <span>{post.comments.length}</span>}
+            <MessageCircle size={16} />
+            <span>Comment</span>
           </button>
           <button
             onClick={() => shareMutation.mutate()}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100 transition-colors"
+            className="flex items-center justify-center gap-1.5 flex-1 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-50 transition-colors"
           >
-            <Share2 size={15} />
-            {post.shares > 0 && <span>{post.shares}</span>}
+            <Share2 size={16} />
+            <span>Share</span>
           </button>
         </div>
-        <button onClick={handleCopyLink} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
-          <Bookmark size={15} />
+        <button onClick={handleCopyLink} className="p-2 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors">
+          <Bookmark size={16} />
         </button>
       </div>
 
-      {/* Comments */}
+      {/* Comments section */}
       {showComments && (
-        <div className="border-t border-gray-100 px-4 py-3 space-y-3">
-          {post.comments?.slice(0, 8).map((c) => (
-            <div key={c._id} className="flex gap-2.5">
-              <Avatar src={c.user?.profilePic} name={c.user?.name} size="xs" />
-              <div className="bg-gray-50 rounded-xl px-3 py-2 flex-1">
-                <p className="text-xs font-semibold text-gray-800">{c.user?.name}</p>
-                <p className="text-xs text-gray-600 mt-0.5">{c.content}</p>
-              </div>
-            </div>
-          ))}
-          <div className="flex gap-2.5 mt-2">
+        <div className="border-t border-gray-100 overflow-hidden">
+          {/* Comment input */}
+          <div className="flex gap-2.5 px-4 py-3">
             <Avatar src={user?.profilePic} name={user?.name} size="xs" />
             <div className="flex-1 flex items-center gap-2 bg-gray-100 rounded-full px-3 py-1.5">
               <input
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && comment.trim() && commentMutation.mutate()}
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmitComment()}
                 placeholder="Add a comment..."
-                className="flex-1 text-xs bg-transparent focus:outline-none"
+                className="flex-1 text-xs bg-transparent focus:outline-none text-gray-700 placeholder-gray-400"
               />
               <button
-                onClick={() => comment.trim() && commentMutation.mutate()}
-                disabled={!comment.trim()}
-                className="text-primary disabled:opacity-30"
+                onClick={handleSubmitComment}
+                disabled={!commentText.trim() || commentMutation.isPending}
+                className="text-primary disabled:opacity-30 transition-opacity"
               >
-                <Send size={13} />
+                {commentMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
               </button>
             </div>
           </div>
+
+          {/* Comments list */}
+          {commentsLoading ? (
+            <div className="px-4 pb-3 space-y-3">
+              {[1, 2].map((i) => (
+                <div key={i} className="flex gap-2.5 animate-pulse">
+                  <div className="w-6 h-6 bg-gray-200 rounded-full flex-shrink-0" />
+                  <div className="bg-gray-100 rounded-xl px-3 py-2 flex-1 space-y-1.5">
+                    <div className="h-2.5 bg-gray-200 rounded w-20" />
+                    <div className="h-2.5 bg-gray-200 rounded w-3/4" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : comments.length > 0 ? (
+            <div className="px-4 pb-3 space-y-2.5">
+              {comments.map((c) => (
+                <div key={c._id} className="flex gap-2.5 group">
+                  <Link to={`/profile/${c.user?.username || c.user?._id}`}>
+                    <Avatar src={c.user?.profilePic} name={c.user?.name} size="xs" />
+                  </Link>
+                  <div className="bg-gray-50 rounded-xl px-3 py-2 flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2">
+                      <Link to={`/profile/${c.user?.username || c.user?._id}`} className="text-xs font-semibold text-gray-800 hover:underline">
+                        {c.user?.name}
+                      </Link>
+                      <span className="text-[10px] text-gray-300">{timeAgo(c.createdAt)}</span>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-0.5 break-words">{c.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="px-4 pb-3 text-xs text-gray-400">No comments yet. Be the first!</p>
+          )}
         </div>
       )}
     </div>

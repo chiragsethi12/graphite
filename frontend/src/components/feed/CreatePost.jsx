@@ -20,7 +20,7 @@ export default function CreatePost() {
       const fd = new FormData();
       fd.append("content", content);
       if (imageFile) fd.append("image", imageFile);
-      return api.post("/posts/create", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      return api.post("/posts/create", fd, { headers: { "Content-Type": undefined } });
     },
     onSuccess: () => {
       setContent("");

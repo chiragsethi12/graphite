@@ -1,0 +1,111 @@
+{
+  "root": true,
+  "env": {
+    "es2022": true
+  },
+  "ignorePatterns": [
+    "node_modules/",
+    "dist/",
+    "coverage/",
+    "backend/",
+    "frontend/"
+  ],
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "settings": {
+    "react": {
+      "version": "detect"
+    },
+    "import/resolver": {
+      "node": {
+        "extensions": [
+          ".js",
+          ".jsx"
+        ]
+      },
+      "alias": {
+        "map": [
+          [
+            "@",
+            "./client/src"
+          ]
+        ],
+        "extensions": [
+          ".js",
+          ".jsx"
+        ]
+      }
+    }
+  },
+  "overrides": [
+    {
+      "files": [
+        "server/**/*.js"
+      ],
+      "env": {
+        "node": true
+      },
+      "extends": [
+        "airbnb-base",
+        "prettier"
+      ],
+      "rules": {
+        "import/extensions": [
+          "error",
+          "ignorePackages",
+          {
+            "js": "never"
+          }
+        ],
+        "import/prefer-default-export": "off",
+        "no-console": "off"
+      }
+    },
+    {
+      "files": [
+        "client/**/*.js",
+        "client/**/*.jsx"
+      ],
+      "env": {
+        "browser": true
+      },
+      "extends": [
+        "airbnb",
+        "prettier"
+      ],
+      "rules": {
+        "import/extensions": [
+          "error",
+          "ignorePackages",
+          {
+            "js": "never",
+            "jsx": "never"
+          }
+        ],
+        "import/prefer-default-export": "off",
+        "no-console": "off",
+        "react/function-component-definition": [
+          "error",
+          {
+            "namedComponents": "function-declaration",
+            "unnamedComponents": "function-expression"
+          }
+        ],
+        "react/jsx-filename-extension": [
+          "warn",
+          {
+            "extensions": [
+              ".jsx"
+            ]
+          }
+        ],
+        "react/react-in-jsx-scope": "off"
+      }
+    }
+  ]
+}

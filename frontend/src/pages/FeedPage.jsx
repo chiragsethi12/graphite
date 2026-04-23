@@ -114,8 +114,8 @@ export default function FeedPage() {
                     <p className="text-xs font-semibold text-gray-800">{post.author?.name}</p>
                     <p className="text-xs text-gray-600 line-clamp-2 mt-0.5">{post.content}</p>
                     <div className="flex gap-3 mt-1 text-[10px] text-gray-400">
-                      <span>♥ {post.likes?.length || 0}</span>
-                      <span>💬 {post.comments?.length || 0}</span>
+                      <span>♥ {post.likesCount || 0}</span>
+                      <span>💬 {post.commentsCount || 0}</span>
                     </div>
                   </div>
                 </div>

@@ -6,11 +6,15 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// Attach JWT from localStorage to every request
+// Attach JWT + handle FormData content-type
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("graphite_token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  // Let the browser set the correct multipart boundary for FormData
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
   }
   return config;
 });

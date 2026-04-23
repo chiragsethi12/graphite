@@ -1,6 +1,6 @@
+import "dotenv/config";  // MUST be first — loads .env before any other import resolves
 import express from "express";
 import http from "http";
-import dotenv from "dotenv";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -17,7 +17,6 @@ import notificationRoutes from "./routes/notification.routes.js";
 import searchRoutes       from "./routes/search.routes.js";
 import analyticsRoutes    from "./routes/analytics.routes.js";
 
-dotenv.config();
 connectDB();
 
 const app = express();

@@ -93,8 +93,8 @@ function PostResult({ post }) {
         </div>
       )}
       <div className="flex gap-4 mt-2 text-xs text-gray-400">
-        <span>♥ {post.likes?.length || 0}</span>
-        <span>💬 {post.comments?.length || 0}</span>
+        <span>♥ {post.likesCount || 0}</span>
+        <span>💬 {post.commentsCount || 0}</span>
       </div>
     </div>
   );
