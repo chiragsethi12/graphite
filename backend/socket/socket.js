@@ -6,7 +6,7 @@ const userSocketMap = {};  // userId -> socketId
 export const initSocket = (server) => {
     io = new Server(server, {
         cors: {
-            origin: process.env.CLIENT_URL,
+            origin: [process.env.CLIENT_URL || "http://localhost:3000", "http://localhost:5173", "http://localhost:3000"],
             methods: ["GET", "POST"],
         },
         pingTimeout: 60000,
@@ -16,11 +16,10 @@ export const initSocket = (server) => {
         const userId = socket.handshake.query.userId;
         if (userId && userId !== "undefined") {
             userSocketMap[userId] = socket.id;
-            // Join a personal room for targeted events
             socket.join(`user:${userId}`);
         }
 
-        // Broadcast online users list
+        // Broadcast online users list to everyone
         io.emit("onlineUsers", Object.keys(userSocketMap));
 
         // ── Typing indicators ────────────────────────────────────
@@ -35,6 +34,26 @@ export const initSocket = (server) => {
             const recipientSocket = userSocketMap[recipientId];
             if (recipientSocket) {
                 io.to(recipientSocket).emit("userStopTyping", { userId });
+            }
+        });
+
+        // ── Real-time message delivery ────────────────────────────
+        // This is a fallback for when the REST API send succeeds but the
+        // HTTP response is enough — the controller handles DB write and
+        // emits `newMessage` via getReceiverSocketId(). This socket event
+        // allows the client to also broadcast for optimistic UI sync.
+        socket.on("messageSent", ({ recipientId, message }) => {
+            const recipientSocket = userSocketMap[recipientId];
+            if (recipientSocket) {
+                io.to(recipientSocket).emit("newMessage", message);
+            }
+        });
+
+        // ── Mark messages as read notification ────────────────────
+        socket.on("markRead", ({ senderId }) => {
+            const senderSocket = userSocketMap[senderId];
+            if (senderSocket) {
+                io.to(senderSocket).emit("messagesRead", { byUserId: userId });
             }
         });
 

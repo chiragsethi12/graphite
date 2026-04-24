@@ -7,6 +7,7 @@ function timeLabel(dateStr) {
   const now = new Date();
   const diffMs = now - d;
   const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "now";
   if (mins < 60) return `${mins}m`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h`;
@@ -15,7 +16,26 @@ function timeLabel(dateStr) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export default function ConversationList({ conversations, activeId, onSelect, searchQuery, onSearchChange }) {
+function ConversationSkeleton() {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3.5 animate-pulse">
+      <div className="w-10 h-10 bg-gray-200 rounded-full flex-shrink-0" />
+      <div className="flex-1 space-y-2">
+        <div className="h-3 bg-gray-200 rounded w-1/2" />
+        <div className="h-2 bg-gray-200 rounded w-3/4" />
+      </div>
+    </div>
+  );
+}
+
+export default function ConversationList({
+  conversations,
+  activeId,
+  onSelect,
+  searchQuery,
+  onSearchChange,
+  isLoading,
+}) {
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-surface-border">
@@ -34,36 +54,54 @@ export default function ConversationList({ conversations, activeId, onSelect, se
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {conversations.map((conv) => {
+        {isLoading && (
+          <>
+            <ConversationSkeleton />
+            <ConversationSkeleton />
+            <ConversationSkeleton />
+          </>
+        )}
+
+        {!isLoading && conversations.map((conv) => {
           const isActive = conv._id === activeId;
           return (
             <button
               key={conv._id}
               onClick={() => onSelect(conv)}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors border-l-2 ${
-                isActive ? "border-primary bg-primary-50/50" : "border-transparent"
-              }`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors border-l-2 ${isActive ? "border-primary bg-primary-50/50" : "border-transparent"
+                }`}
             >
-              <Avatar src={conv.participant?.profilePic} name={conv.participant?.name} size="md" online={conv.online} />
+              <Avatar
+                src={conv.participant?.profilePic}
+                name={conv.participant?.name}
+                size="md"
+              />
               <div className="flex-1 min-w-0 text-left">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-gray-900 truncate">{conv.participant?.name}</p>
-                  <span className="text-[10px] text-gray-400 flex-shrink-0 ml-2">{timeLabel(conv.lastMessageAt)}</span>
+                  <p className="text-sm font-semibold text-gray-900 truncate">
+                    {conv.participant?.name}
+                  </p>
+                  <span className="text-[10px] text-gray-400 flex-shrink-0 ml-2">
+                    {timeLabel(conv.lastMessageAt)}
+                  </span>
                 </div>
-                <p className="text-xs text-gray-500 truncate mt-0.5">{conv.lastMessage}</p>
+                <p className="text-xs text-gray-500 truncate mt-0.5">
+                  {conv.lastMessage}
+                </p>
               </div>
               {conv.unread > 0 && (
                 <span className="flex-shrink-0 w-4 h-4 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center">
-                  {conv.unread}
+                  {conv.unread > 9 ? "9+" : conv.unread}
                 </span>
               )}
             </button>
           );
         })}
 
-        {conversations.length === 0 && (
+        {!isLoading && conversations.length === 0 && (
           <div className="flex flex-col items-center justify-center h-40 text-gray-400">
             <p className="text-sm">No conversations yet</p>
+            <p className="text-xs mt-1">Connect with people and start messaging</p>
           </div>
         )}
       </div>

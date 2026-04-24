@@ -205,7 +205,7 @@ export const getRecommendedUsers = async (req, res) => {
 
 // ─── PUT /api/users/update ───────────────────────────────────────────────────
 export const updateProfile = async (req, res) => {
-    const allowed = ["name", "headline", "bio", "location", "website", "skills", "interests", "experience", "education", "username"];
+    const allowed = ["name", "headline", "about", "location", "website", "skills", "interests", "experience", "education", "username"];
     const updateData = {};
 
     allowed.forEach((field) => {

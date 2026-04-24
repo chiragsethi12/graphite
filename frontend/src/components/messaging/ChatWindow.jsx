@@ -2,23 +2,39 @@ import { useState, useEffect, useRef } from "react";
 import { Send, Smile, Paperclip, Video, Phone, MoreVertical } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { getSocket } from "../../lib/socket";
+import {
+  useMessageThread,
+  useSendMessage,
+  useMarkConversationRead,
+} from "../../hooks/useMessages";
 import Avatar from "../ui/Avatar";
 
 function MessageBubble({ msg, isMine }) {
+  const timeStr = new Date(msg.createdAt || Date.now()).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   return (
     <div className={`flex items-end gap-2 ${isMine ? "flex-row-reverse" : "flex-row"}`}>
-      {!isMine && <Avatar src={msg.sender?.profilePic} name={msg.sender?.name} size="xs" />}
+      {!isMine && (
+        <Avatar
+          src={msg.sender?.profilePic}
+          name={msg.sender?.name}
+          size="xs"
+        />
+      )}
       <div
-        className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-          isMine
+        className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${isMine
             ? "bg-primary text-white rounded-br-sm"
             : "bg-white border border-surface-border text-gray-800 rounded-bl-sm shadow-card"
-        }`}
+          }`}
       >
-        {msg.text}
-        <div className={`text-[10px] mt-1 ${isMine ? "text-primary-200 text-right" : "text-gray-400"}`}>
-          {new Date(msg.createdAt || Date.now()).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
-          {isMine && <span className="ml-1">✓✓</span>}
+        {/* msg.content is the correct field name from the Message model */}
+        {msg.content}
+        <div className={`text-[10px] mt-1 ${isMine ? "text-white/60 text-right" : "text-gray-400"}`}>
+          {timeStr}
+          {isMine && <span className="ml-1">{msg.read ? "✓✓" : "✓"}</span>}
         </div>
       </div>
     </div>
@@ -27,45 +43,79 @@ function MessageBubble({ msg, isMine }) {
 
 export default function ChatWindow({ conversation }) {
   const { user } = useAuth();
-  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-  const [typing, setTyping] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const bottomRef = useRef(null);
-  const socket = getSocket();
+  const typingTimer = useRef(null);
 
+  const recipientId = conversation?.participant?._id;
+
+  const { data, isLoading, fetchNextPage, hasNextPage } = useMessageThread(recipientId);
+  const sendMessage = useSendMessage(recipientId);
+  const markRead = useMarkConversationRead(recipientId);
+
+  // Flatten pages of messages (oldest first)
+  const allMessages = data?.pages?.flatMap((p) => p.messages) || [];
+
+  // Mark messages as read when conversation is opened
   useEffect(() => {
-    if (!conversation) return;
-    setMessages([]);
+    if (recipientId && conversation?.unread > 0) {
+      markRead.mutate();
+    }
+  }, [recipientId]);
 
-    socket.emit("join-room", conversation._id);
-    socket.on("message", (msg) => setMessages((p) => [...p, msg]));
-    socket.on("typing", () => {
-      setTyping(true);
-      setTimeout(() => setTyping(false), 2000);
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [allMessages.length]);
+
+  // Typing indicator via socket
+  useEffect(() => {
+    if (!recipientId) return;
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleTyping = ({ userId }) => {
+      if (userId === recipientId) {
+        setIsTyping(true);
+        clearTimeout(typingTimer.current);
+        typingTimer.current = setTimeout(() => setIsTyping(false), 2500);
+      }
+    };
+
+    socket.on("userTyping", handleTyping);
+    socket.on("userStopTyping", ({ userId }) => {
+      if (userId === recipientId) setIsTyping(false);
     });
 
     return () => {
-      socket.off("message");
-      socket.off("typing");
+      socket.off("userTyping", handleTyping);
+      socket.off("userStopTyping");
     };
-  }, [conversation?._id]);
+  }, [recipientId]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, typing]);
+  const handleSend = () => {
+    const trimmed = input.trim();
+    if (!trimmed || sendMessage.isPending) return;
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
-    const msg = {
-      _id: Date.now().toString(),
-      text: input,
-      sender: user,
-      createdAt: new Date().toISOString(),
-      roomId: conversation._id,
-    };
-    socket.emit("send-message", msg);
-    setMessages((p) => [...p, msg]);
+    sendMessage.mutate(trimmed);
     setInput("");
+
+    // Stop typing indicator
+    const socket = getSocket();
+    if (socket && recipientId) {
+      socket.emit("stopTyping", { recipientId });
+    }
+  };
+
+  const handleInputChange = (e) => {
+    setInput(e.target.value);
+
+    // Emit typing indicator
+    const socket = getSocket();
+    if (socket && recipientId) {
+      socket.emit("typing", { recipientId });
+    }
   };
 
   if (!conversation) {
@@ -87,72 +137,112 @@ export default function ChatWindow({ conversation }) {
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-surface-border bg-white">
         <div className="flex items-center gap-3">
-          <Avatar src={conversation.participant?.profilePic} name={conversation.participant?.name} size="md" online={conversation.online} />
+          <Avatar
+            src={conversation.participant?.profilePic}
+            name={conversation.participant?.name}
+            size="md"
+          />
           <div>
-            <p className="font-semibold text-sm text-gray-900">{conversation.participant?.name}</p>
-            <p className={`text-xs ${conversation.online ? "text-green-500" : "text-gray-400"}`}>
-              {conversation.online ? "● Online" : "Offline"}
+            <p className="font-semibold text-sm text-gray-900">
+              {conversation.participant?.name}
+            </p>
+            <p className="text-xs text-gray-400">
+              {conversation.participant?.headline}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"><Video size={18} /></button>
-          <button className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"><Phone size={18} /></button>
-          <button className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"><MoreVertical size={18} /></button>
+          <button className="p-2 rounded-lg text-gray-500 hover:bg-gray-100">
+            <Video size={18} />
+          </button>
+          <button className="p-2 rounded-lg text-gray-500 hover:bg-gray-100">
+            <Phone size={18} />
+          </button>
+          <button className="p-2 rounded-lg text-gray-500 hover:bg-gray-100">
+            <MoreVertical size={18} />
+          </button>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 bg-gray-50">
-        {messages.length === 0 && (
+        {/* Load older messages */}
+        {hasNextPage && (
+          <div className="text-center">
+            <button
+              onClick={() => fetchNextPage()}
+              className="text-xs text-primary hover:underline"
+            >
+              Load older messages
+            </button>
+          </div>
+        )}
+
+        {isLoading && (
+          <div className="flex justify-center py-8">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+
+        {!isLoading && allMessages.length === 0 && (
           <div className="text-center text-xs text-gray-400 mt-8">
             Start your conversation with {conversation.participant?.name}
           </div>
         )}
-        {messages.map((msg) => (
-          <MessageBubble key={msg._id} msg={msg} isMine={msg.sender?._id === user?._id || msg.sender === user?._id} />
-        ))}
-        {typing && (
+
+        {allMessages.map((msg) => {
+          const senderId = msg.sender?._id || msg.sender;
+          const isMine = senderId === user?._id;
+          return <MessageBubble key={msg._id} msg={msg} isMine={isMine} />;
+        })}
+
+        {isTyping && (
           <div className="flex items-center gap-2">
-            <Avatar src={conversation.participant?.profilePic} name={conversation.participant?.name} size="xs" />
+            <Avatar
+              src={conversation.participant?.profilePic}
+              name={conversation.participant?.name}
+              size="xs"
+            />
             <div className="bg-white border border-surface-border rounded-2xl rounded-bl-sm px-4 py-2.5 shadow-card">
               <div className="flex gap-1 items-center h-4">
                 {[0, 1, 2].map((i) => (
-                  <div key={i} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                  <div
+                    key={i}
+                    className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: `${i * 0.15}s` }}
+                  />
                 ))}
               </div>
             </div>
           </div>
         )}
+
         <div ref={bottomRef} />
       </div>
 
       {/* Input */}
       <div className="border-t border-surface-border bg-white px-4 py-3">
         <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-3 py-2">
-          <button className="text-gray-400 hover:text-primary"><Paperclip size={17} /></button>
+          <button className="text-gray-400 hover:text-primary">
+            <Paperclip size={17} />
+          </button>
           <input
             value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              socket.emit("typing", { roomId: conversation._id });
-            }}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            onChange={handleInputChange}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
             placeholder="Write a message..."
             className="flex-1 bg-transparent text-sm focus:outline-none placeholder-gray-400"
           />
-          <button className="text-gray-400 hover:text-primary"><Smile size={17} /></button>
+          <button className="text-gray-400 hover:text-primary">
+            <Smile size={17} />
+          </button>
           <button
-            onClick={sendMessage}
-            disabled={!input.trim()}
+            onClick={handleSend}
+            disabled={!input.trim() || sendMessage.isPending}
             className="ml-1 w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center hover:bg-primary-950 disabled:opacity-40 transition-colors"
           >
             <Send size={15} />
           </button>
-        </div>
-        <div className="flex gap-4 mt-2 px-1">
-          <button className="text-[11px] text-gray-400 flex items-center gap-1 hover:text-primary">📎 Attach File</button>
-          <button className="text-[11px] text-gray-400 flex items-center gap-1 hover:text-primary">🖼️ Send Image</button>
         </div>
       </div>
     </div>

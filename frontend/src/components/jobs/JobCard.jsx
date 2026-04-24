@@ -10,6 +10,25 @@ const badgeConfig = {
   "Featured": "premium",
 };
 
+function formatSalary(salary) {
+  if (!salary) return null;
+  if (typeof salary === "string") return salary;
+  
+  const { min, max, currency, period } = salary;
+  if (!min && !max) return null;
+
+  const fmt = (n) => 
+    new Intl.NumberFormat("en-US", { 
+      style: "currency", 
+      currency: currency || "USD", 
+      maximumFractionDigits: 0 
+    }).format(n);
+
+  if (min && max) return `${fmt(min)} – ${fmt(max)} / ${period}`;
+  if (min) return `From ${fmt(min)} / ${period}`;
+  return `Up to ${fmt(max)} / ${period}`;
+}
+
 export default function JobCard({ job }) {
   const applyMutation = useMutation({
     mutationFn: () => api.post(`/jobs/${job._id}/apply`),
@@ -47,8 +66,8 @@ export default function JobCard({ job }) {
         {job.location && (
           <span className="flex items-center gap-1"><MapPin size={11} />{job.location}</span>
         )}
-        {job.salary && (
-          <span className="flex items-center gap-1"><DollarSign size={11} />{job.salary}</span>
+        {formatSalary(job.salary) && (
+          <span className="flex items-center gap-1"><DollarSign size={11} />{formatSalary(job.salary)}</span>
         )}
         {job.type && (
           <span className="flex items-center gap-1"><Clock size={11} />{job.type}</span>

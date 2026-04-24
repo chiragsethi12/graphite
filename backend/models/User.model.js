@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema(
 
         // Profile content
         headline:   { type: String, default: "", maxlength: 220 },
-        bio:        { type: String, default: "", maxlength: 2600 },
+        about:      { type: String, default: "", maxlength: 2600 },
         location:   { type: String, default: "" },
         website:    { type: String, default: "" },
         profilePic: { type: String, default: "" },
@@ -61,6 +61,9 @@ const userSchema = new mongoose.Schema(
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────
 
+// Username lookup (unique constraint creates implicit index, explicit for clarity)
+userSchema.index({ username: 1 });
+
 // Full-text search: name + skills + headline + location
 userSchema.index(
     { name: "text", skills: "text", headline: "text", location: "text" },
@@ -78,6 +81,29 @@ userSchema.index({ skillScore: -1 });
 userSchema.pre("save", async function () {
     if (!this.isModified("password")) return;
     this.password = await bcrypt.hash(this.password, 12);
+});
+
+// Auto-generate username from name if not provided (on first save only)
+userSchema.pre("save", async function () {
+    if (this.username) return;
+
+    // Derive base slug from name: "John Doe" → "johndoe"
+    const base = this.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "")
+        .slice(0, 20);
+
+    // Check for collisions and append random suffix if needed
+    let candidate = base;
+    let exists = await mongoose.model("User").findOne({ username: candidate });
+
+    while (exists) {
+        const suffix = Math.floor(Math.random() * 9000 + 1000); // 4-digit random
+        candidate = `${base}${suffix}`;
+        exists = await mongoose.model("User").findOne({ username: candidate });
+    }
+
+    this.username = candidate;
 });
 
 // ─── Methods ─────────────────────────────────────────────────────────────────

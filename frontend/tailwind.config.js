@@ -1,38 +1,41 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
   theme: {
     extend: {
       colors: {
         primary: {
           DEFAULT: "#660033",
-          50:  "#fdf2f6",
-          100: "#fce7f0",
-          200: "#fbc9dd",
-          300: "#f899bf",
-          400: "#f3579a",
-          500: "#e82b76",
-          600: "#cc1159",
-          700: "#a80d49",
-          800: "#880d3e",
+          50: "#fff0f5",
+          100: "#ffd6e7",
+          200: "#ffadd0",
+          300: "#ff80b5",
+          400: "#f95c9c",
+          500: "#e83a83",
+          600: "#cc2266",
+          700: "#a8144d",
+          800: "#880d3a",
           900: "#660033",
-          950: "#420020",
+          950: "#4d0026",
         },
         surface: {
-          DEFAULT: "#FFFFFF",
-          muted: "#F9FAFB",
-          border: "#E5E7EB",
+          DEFAULT: "#ffffff",
+          muted: "#f9fafb",
+          border: "#e5e7eb",
         },
       },
-      fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui"],
+      borderRadius: {
+        card: "0.75rem",
       },
       boxShadow: {
-        card: "0 1px 4px 0 rgba(0,0,0,0.08), 0 0 1px 0 rgba(0,0,0,0.04)",
-        "card-hover": "0 4px 16px 0 rgba(0,0,0,0.12), 0 0 1px 0 rgba(0,0,0,0.06)",
+        card: "0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 2px -1px rgba(0,0,0,0.04)",
+        "card-hover": "0 4px 12px 0 rgba(0,0,0,0.10), 0 2px 4px -2px rgba(0,0,0,0.06)",
       },
-      borderRadius: {
-        card: "12px",
+      fontFamily: {
+        sans: ["Inter", "system-ui", "sans-serif"],
       },
     },
   },

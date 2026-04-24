@@ -14,17 +14,21 @@ import { upload } from "../config/cloudinary.js";
 
 const router = express.Router();
 
-// Order matters: specific routes before :identifier param
-router.get("/search",          protect, searchUsers);
-router.get("/suggestions",     protect, getRecommendedUsers);
-router.put("/update",          protect, upload.fields([
+// ── Specific routes FIRST (before :identifier param) ─────────────────────────
+router.get("/search", protect, searchUsers);
+router.get("/suggestions", protect, getRecommendedUsers);
+router.put("/update", protect, upload.fields([
     { name: "profilePic", maxCount: 1 },
-    { name: "bannerPic",  maxCount: 1 },
+    { name: "bannerPic", maxCount: 1 },
 ]), updateProfile);
 router.put("/change-password", protect, changePassword);
-router.put("/privacy",         protect, updatePrivacy);
-router.get("/:identifier",    protect, getUserProfile);
-router.get("/:userId/posts",  protect, getUserPosts);
-router.get("/:userId/stats",  protect, getUserStats);
+router.put("/privacy", protect, updatePrivacy);
+
+// ── Sub-resource routes before the :identifier wildcard ──────────────────────
+router.get("/:userId/posts", protect, getUserPosts);
+router.get("/:userId/stats", protect, getUserStats);
+
+// ── Generic profile lookup — must be LAST ─────────────────────────────────────
+router.get("/:identifier", protect, getUserProfile);
 
 export default router;
