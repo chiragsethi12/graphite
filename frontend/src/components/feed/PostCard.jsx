@@ -25,6 +25,22 @@ function timeAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString();
 }
 
+function formatText(text) {
+  if (!text) return null;
+  const regex = /(\*\*.*?\*\*|\*.*?\*)/g;
+  const splitText = text.split(regex);
+  
+  return splitText.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={index} className="font-bold">{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('*') && part.endsWith('*')) {
+      return <em key={index} className="italic">{part.slice(1, -1)}</em>;
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
+
 // ─── Comment Component ────────────────────────────────────────────────────────
 
 function Comment({ comment, postId, onReply }) {
@@ -256,8 +272,8 @@ export default function PostCard({ post: initialPost }) {
         {/* Content */}
         {post.content && (
           <div className="px-4 pb-3">
-            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
-              {post.content}
+            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap break-words">
+              {formatText(post.content)}
             </p>
           </div>
         )}
@@ -300,7 +316,7 @@ export default function PostCard({ post: initialPost }) {
               </span>
             </div>
             <div className="p-3">
-              <p className="text-sm text-gray-700 line-clamp-3">{post.sharedPost.content}</p>
+              <p className="text-sm text-gray-700 line-clamp-3 break-words">{formatText(post.sharedPost.content)}</p>
               {post.sharedPost.image && (
                 <img
                   src={post.sharedPost.image}

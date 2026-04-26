@@ -10,12 +10,27 @@ export const getUserProfile = async (req, res) => {
 
     const user = await User.findOne(query)
         .select("-password -resetPasswordToken -resetPasswordExpires")
-        .populate("connections", "name profilePic headline username location");
+        .populate("connections", "name profilePic headline username location")
+        .populate("profileViewHistory.viewerId", "name profilePic username");
 
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
     if (req.user._id.toString() !== user._id.toString()) {
-        await User.findByIdAndUpdate(user._id, { $inc: { profileViews: 1 } });
+        // Remove previous view from this user to prevent spam
+        await User.findByIdAndUpdate(user._id, { 
+            $inc: { profileViews: 1 },
+            $pull: { profileViewHistory: { viewerId: req.user._id } }
+        });
+        
+        // Push new view to front/back and keep last 100
+        await User.findByIdAndUpdate(user._id, {
+            $push: {
+                profileViewHistory: {
+                    $each: [{ viewerId: req.user._id, viewedAt: new Date() }],
+                    $slice: -100
+                }
+            }
+        });
     }
 
     res.json({ success: true, user });

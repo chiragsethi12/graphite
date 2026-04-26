@@ -79,10 +79,11 @@ export default function CreatePost() {
             onFocus={() => setIsExpanded(true)}
             placeholder={`What's on your mind, ${user?.name?.split(" ")[0]}?`}
             rows={isExpanded ? 4 : 2}
+            maxLength={3000}
             className="w-full text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none leading-relaxed"
           />
           {content.length > 200 && (
-            <p className={`text-[10px] text-right mt-0.5 ${content.length > 2800 ? "text-red-500" : "text-gray-400"}`}>
+            <p className={`text-[10px] text-right mt-0.5 ${content.length > 2400 ? "text-red-500" : "text-gray-400"}`}>
               {content.length}/3000
             </p>
           )}
@@ -146,7 +147,7 @@ export default function CreatePost() {
                     mutation.mutate();
                   }}
                   loading={mutation.isPending}
-                  disabled={!content.trim() && !image}
+                  disabled={(!content.trim() && !image) || content.trim().length > 3000}
                 >
                   <Send size={14} /> Publish
                 </Button>

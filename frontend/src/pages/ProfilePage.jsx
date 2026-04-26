@@ -404,6 +404,29 @@ export default function ProfilePage() {
                 </p>
               </Card>
             )}
+
+            {/* Profile Views */}
+            {isOwner && profile.profileViewHistory?.length > 0 && (
+              <Card className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <BarChart2 size={16} className="text-primary" />
+                  <p className="text-sm font-semibold text-gray-800">Who viewed your profile</p>
+                </div>
+                <div className="flex -space-x-2 overflow-hidden mb-2">
+                  {profile.profileViewHistory.slice().reverse().slice(0, 5).map((view, i) => (
+                    view.viewerId && (
+                      <Link key={i} to={`/profile/${view.viewerId.username || view.viewerId._id}`} className="inline-block ring-2 ring-white rounded-full">
+                        <Avatar src={view.viewerId.profilePic} name={view.viewerId.name} size="xs" />
+                      </Link>
+                    )
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 leading-snug mt-2">
+                  Viewed by <span className="font-medium text-gray-700">{profile.profileViewHistory[profile.profileViewHistory.length - 1]?.viewerId?.name}</span>
+                  {stats?.profileViews > 1 && ` and ${stats.profileViews - 1} others`}
+                </p>
+              </Card>
+            )}
           </div>
 
           {/* RIGHT: Content sections */}

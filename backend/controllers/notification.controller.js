@@ -24,7 +24,7 @@ export const getUnreadCount = async (req, res) => {
     res.json({ success: true, count });
 };
 
-// PUT /api/notifications/read-all
+// PATCH /api/notifications/mark-all-read
 export const markAllAsRead = async (req, res) => {
     const now = new Date();
     await Notification.updateMany(

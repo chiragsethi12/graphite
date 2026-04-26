@@ -46,6 +46,10 @@ const userSchema = new mongoose.Schema(
 
         // Stats & ranking
         profileViews: { type: Number, default: 0 },
+        profileViewHistory: [{
+            viewerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+            viewedAt: { type: Date, default: Date.now }
+        }],
         skillScore:   { type: Number, default: 0 },   // engagement-based score
 
         // Privacy & settings

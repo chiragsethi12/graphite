@@ -128,7 +128,7 @@ export default function NotificationsPage() {
     // Only fire if there are unread notifications (avoid unnecessary API calls)
     const markRead = async () => {
       try {
-        await api.put("/notifications/read-all");
+        await api.patch("/notifications/mark-all-read");
         clearNotificationCount();
         // Silently refresh the list so read states update without a toast
         queryClient.invalidateQueries({ queryKey: ["notifications"] });
