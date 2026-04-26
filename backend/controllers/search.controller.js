@@ -14,25 +14,68 @@ export const search = async (req, res) => {
     if (!q || !q.trim())
         return res.status(400).json({ success: false, message: "Search query is required" });
 
+    const trimmed = q.trim();
     const result = { users: [], jobs: [], posts: [] };
 
     // ── Users ────────────────────────────────────────────────────
     if (type === "all" || type === "users") {
-        const userFilter = { _id: { $ne: req.user._id }, $text: { $search: q } };
-        if (skills)   userFilter.skills   = { $in: skills.split(",").map((s) => new RegExp(s.trim(), "i")) };
-        if (location) userFilter.location = { $regex: location.trim(), $options: "i" };
-        if (company)  userFilter["experience.company"] = { $regex: company.trim(), $options: "i" };
+        // Build shared filters for skills / location / company
+        const extraFilter = { _id: { $ne: req.user._id }, isPublic: { $ne: false } };
+        if (skills)   extraFilter.skills   = { $in: skills.split(",").map((s) => new RegExp(s.trim(), "i")) };
+        if (location) extraFilter.location = { $regex: location.trim(), $options: "i" };
+        if (company)  extraFilter["experience.company"] = { $regex: company.trim(), $options: "i" };
 
-        result.users = await User.find(userFilter)
+        // Query 1: Full-text search (scored)
+        const textFilter = { ...extraFilter, $text: { $search: trimmed } };
+        const textResultsPromise = User.find(textFilter)
             .sort({ score: { $meta: "textScore" } })
-            .skip((page - 1) * limit)
             .limit(limit)
             .select("name username profilePic headline location skills");
+
+        // Query 2: Regex search on username + name
+        const regexFilter = {
+            ...extraFilter,
+            $or: [
+                { username: { $regex: trimmed, $options: "i" } },
+                { name: { $regex: trimmed, $options: "i" } },
+            ],
+        };
+        const regexResultsPromise = User.find(regexFilter)
+            .sort({ skillScore: -1, createdAt: -1 })
+            .limit(limit)
+            .select("name username profilePic headline location skills");
+
+        const [textResults, regexResults] = await Promise.all([
+            textResultsPromise.catch(() => []),
+            regexResultsPromise,
+        ]);
+
+        // Merge & deduplicate — text-scored results come first
+        const seen = new Set();
+        const merged = [];
+
+        for (const user of textResults) {
+            const uid = user._id.toString();
+            if (!seen.has(uid)) {
+                seen.add(uid);
+                merged.push(user);
+            }
+        }
+        for (const user of regexResults) {
+            const uid = user._id.toString();
+            if (!seen.has(uid)) {
+                seen.add(uid);
+                merged.push(user);
+            }
+        }
+
+        // Apply pagination to merged results
+        result.users = merged.slice((page - 1) * limit, page * limit);
     }
 
     // ── Jobs ─────────────────────────────────────────────────────
     if (type === "all" || type === "jobs") {
-        const jobFilter = { isActive: true, $text: { $search: q } };
+        const jobFilter = { isActive: true, $text: { $search: trimmed } };
         result.jobs = await Job.find(jobFilter)
             .sort({ score: { $meta: "textScore" } })
             .skip((page - 1) * limit)
@@ -43,7 +86,7 @@ export const search = async (req, res) => {
 
     // ── Posts ─────────────────────────────────────────────────────
     if (type === "all" || type === "posts") {
-        const postFilter = { $text: { $search: q } };
+        const postFilter = { $text: { $search: trimmed } };
         result.posts = await Post.find(postFilter)
             .sort({ score: { $meta: "textScore" } })
             .skip((page - 1) * limit)

@@ -9,7 +9,6 @@ export default function Navbar() {
   const { user, logout, unreadNotifications } = useAuth();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const dropdownRef = useRef(null);
 
   // Close dropdown on outside click
@@ -29,13 +28,6 @@ export default function Navbar() {
     navigate("/login");
   };
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim().length < 2) return;
-    navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-    setSearchQuery("");
-  };
-
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-surface-border h-14">
       <div className="max-w-[1280px] mx-auto h-full px-4 flex items-center gap-4">
@@ -44,17 +36,13 @@ export default function Navbar() {
           Graphite
         </Link>
 
-        {/* Search */}
-        <form onSubmit={handleSearch} className="flex-1 max-w-[280px] relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search people, jobs, posts..."
-            className="w-full pl-9 pr-3 py-1.5 text-sm bg-gray-100 border border-transparent rounded-lg focus:outline-none focus:bg-white focus:border-gray-300 transition-colors"
-          />
-        </form>
+        {/* Search icon button */}
+        <button
+          onClick={() => navigate("/search")}
+          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+        >
+          <Search size={18} />
+        </button>
 
         <div className="flex-1" />
 

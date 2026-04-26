@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { User, Lock, Bell, Shield, Camera, Save, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, Bell, Shield, Camera, Save, Eye, EyeOff, X, Image as ImageIcon } from 'lucide-react';
 import api from '../lib/axios';
 import { useAuth } from '../context/AuthContext';
 import MainLayout from '../components/layout/MainLayout';
@@ -14,6 +14,9 @@ const TABS = [
   { key: 'account', label: 'Account', icon: Lock },
   { key: 'privacy', label: 'Privacy', icon: Shield },
 ];
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ACCEPTED_IMAGE_TYPES = "image/jpeg,image/jpg,image/png,image/webp";
 
 function EditProfileTab() {
   const { user, setUser } = useAuth();
@@ -30,27 +33,31 @@ function EditProfileTab() {
   });
   const [profilePic, setProfilePic] = useState(null);
   const [bannerPic, setBannerPic] = useState(null);
+  const [removeProfilePic, setRemoveProfilePic] = useState(false);
+  const [removeBannerPic, setRemoveBannerPic] = useState(false);
+
+  const hasPhotoChanges = !!profilePic || !!bannerPic || removeProfilePic || removeBannerPic;
 
   const updateMutation = useMutation({
     mutationFn: async () => {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => {
         if (k === 'skills' || k === 'interests') {
-          fd.append(
-            k,
-            JSON.stringify(
-              v
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean)
-            )
-          );
+          fd.append(k, JSON.stringify(v.split(',').map((s) => s.trim()).filter(Boolean)));
         } else {
           fd.append(k, v);
         }
       });
-      if (profilePic) fd.append('profilePic', profilePic);
-      if (bannerPic) fd.append('bannerPic', bannerPic);
+      if (profilePic) {
+        fd.append('profilePic', profilePic);
+      } else if (removeProfilePic) {
+        fd.append('profilePic', '');
+      }
+      if (bannerPic) {
+        fd.append('bannerPic', bannerPic);
+      } else if (removeBannerPic) {
+        fd.append('bannerPic', '');
+      }
 
       return api.put('/users/update', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -59,14 +66,64 @@ function EditProfileTab() {
     onSuccess: (res) => {
       const data = res?.data || res;
       setUser(data.user);
-      // Invalidate profile queries (by id or username)
       queryClient.invalidateQueries({
         predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === 'profile',
       });
+      setProfilePic(null);
+      setBannerPic(null);
+      setRemoveProfilePic(false);
+      setRemoveBannerPic(false);
       toast.success('Profile updated!');
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Update failed'),
   });
+
+  const handleProfilePicChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('Image must be under 5MB');
+      e.target.value = '';
+      return;
+    }
+    setProfilePic(file);
+    setRemoveProfilePic(false);
+  };
+
+  const handleBannerPicChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('Image must be under 5MB');
+      e.target.value = '';
+      return;
+    }
+    setBannerPic(file);
+    setRemoveBannerPic(false);
+  };
+
+  const handleRemoveProfilePic = () => {
+    if (profilePic) {
+      setProfilePic(null);
+    } else if (user?.profilePic) {
+      setRemoveProfilePic(true);
+    }
+  };
+
+  const handleRemoveBannerPic = () => {
+    if (bannerPic) {
+      setBannerPic(null);
+    } else if (user?.bannerPic) {
+      setRemoveBannerPic(true);
+    }
+  };
+
+  // Determine displayed avatar source
+  const displayedProfilePic = removeProfilePic ? null : (profilePic ? URL.createObjectURL(profilePic) : user?.profilePic);
+  const displayedBannerPic = removeBannerPic ? null : (bannerPic ? URL.createObjectURL(bannerPic) : user?.bannerPic);
+
+  const showProfilePicRemove = profilePic || (user?.profilePic && !removeProfilePic);
+  const showBannerPicRemove = bannerPic || (user?.bannerPic && !removeBannerPic);
 
   const update = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
@@ -75,44 +132,107 @@ function EditProfileTab() {
       {/* Photos */}
       <div className="relative">
         <div className="h-28 bg-primary-900 rounded-card overflow-hidden relative">
-          {(bannerPic || user?.bannerPic) && (
+          {displayedBannerPic && (
             <img
-              src={bannerPic ? URL.createObjectURL(bannerPic) : user.bannerPic}
+              src={displayedBannerPic}
               className="w-full h-full object-cover"
               alt=""
             />
           )}
-          <label className="absolute bottom-2 right-2 p-1.5 bg-white/80 rounded-lg cursor-pointer hover:bg-white transition-colors">
-            <Camera size={14} className="text-gray-600" />
-            <input
-              type="file"
-              className="hidden"
-              accept="image/*"
-              onChange={(e) => setBannerPic(e.target.files[0])}
-            />
-          </label>
+          {/* Unsaved banner indicator */}
+          {(bannerPic || removeBannerPic) && (
+            <div className="absolute top-2 left-2 px-2 py-0.5 bg-amber-400 text-amber-900 text-[10px] font-bold rounded-full">
+              Unsaved
+            </div>
+          )}
+          <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+            {showBannerPicRemove && (
+              <button
+                type="button"
+                onClick={handleRemoveBannerPic}
+                className="p-1.5 bg-white/80 rounded-lg cursor-pointer hover:bg-red-50 transition-colors"
+                title="Remove banner"
+              >
+                <X size={14} className="text-red-500" />
+              </button>
+            )}
+            <label className="p-1.5 bg-white/80 rounded-lg cursor-pointer hover:bg-white transition-colors">
+              <Camera size={14} className="text-gray-600" />
+              <input
+                type="file"
+                className="hidden"
+                accept={ACCEPTED_IMAGE_TYPES}
+                onChange={handleBannerPicChange}
+              />
+            </label>
+          </div>
         </div>
         <div className="absolute -bottom-8 left-6">
           <div className="relative">
-            <Avatar
-              src={profilePic ? URL.createObjectURL(profilePic) : user?.profilePic}
-              name={user?.name}
-              size="xl"
-            />
+            <div className={`${(profilePic || removeProfilePic) ? 'ring-2 ring-amber-400' : ''} rounded-full`}>
+              <Avatar
+                src={displayedProfilePic}
+                name={user?.name}
+                size="xl"
+              />
+            </div>
+            {/* Unsaved dot on avatar */}
+            {(profilePic || removeProfilePic) && (
+              <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 border-2 border-white rounded-full" title="Unsaved change" />
+            )}
             <label className="absolute bottom-0 right-0 p-1.5 bg-white rounded-full shadow-md cursor-pointer hover:bg-gray-50 transition-colors">
               <Camera size={12} className="text-gray-600" />
               <input
                 type="file"
                 className="hidden"
-                accept="image/*"
-                onChange={(e) => setProfilePic(e.target.files[0])}
+                accept={ACCEPTED_IMAGE_TYPES}
+                onChange={handleProfilePicChange}
               />
             </label>
           </div>
         </div>
       </div>
 
-      <div className="pt-8 space-y-4">
+      {/* Photo status area */}
+      <div className="pt-8 space-y-1">
+        <div className="flex items-center gap-3 flex-wrap">
+          {profilePic && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full">
+              <ImageIcon size={11} />
+              Photo ready to save
+            </span>
+          )}
+          {removeProfilePic && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
+              <X size={11} />
+              Photo will be removed
+            </span>
+          )}
+          {bannerPic && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full">
+              <ImageIcon size={11} />
+              Banner ready to save
+            </span>
+          )}
+          {removeBannerPic && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
+              <X size={11} />
+              Banner will be removed
+            </span>
+          )}
+        </div>
+        {showProfilePicRemove && (
+          <button
+            type="button"
+            onClick={handleRemoveProfilePic}
+            className="text-xs text-red-500 hover:text-red-700 hover:underline transition-colors"
+          >
+            Remove Photo
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1 block">Full Name</label>
@@ -207,7 +327,8 @@ function EditProfileTab() {
           loading={updateMutation.isPending}
           className="flex items-center gap-2"
         >
-          <Save size={14} /> Save Changes
+          {hasPhotoChanges ? <Camera size={14} /> : <Save size={14} />}
+          Save Changes{hasPhotoChanges ? ' (includes photo)' : ''}
         </Button>
       </div>
     </div>

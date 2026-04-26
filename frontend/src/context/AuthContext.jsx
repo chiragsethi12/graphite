@@ -78,8 +78,8 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const register = async (name, email, password) => {
-    const { data } = await api.post("/auth/register", { name, email, password });
+  const register = async (name, email, password, username) => {
+    const { data } = await api.post("/auth/register", { name, email, password, username });
     localStorage.setItem("graphite_token", data.token);
     setUser(data.user);
     connectSocket(data.user._id);

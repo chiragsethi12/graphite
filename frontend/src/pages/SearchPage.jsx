@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import { Search, MapPin, Briefcase, Filter, X, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "../lib/axios";
@@ -102,6 +102,7 @@ function PostResult({ post }) {
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const initialQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(initialQuery);
   const [activeTab, setActiveTab] = useState("users");
@@ -109,6 +110,12 @@ export default function SearchPage() {
   const [filters, setFilters] = useState({ skills: "", location: "", company: "" });
 
   const searchQuery = searchParams.get("q") || "";
+
+  // Dropdown states
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const suggestionsRef = useRef(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["search", searchQuery, activeTab, filters],
@@ -122,10 +129,50 @@ export default function SearchPage() {
     enabled: searchQuery.length >= 2,
   });
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target)) {
+        setSuggestionsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Fetch live suggestions
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (query.trim().length >= 2 && query !== searchQuery) {
+        setSuggestionsLoading(true);
+        setSuggestionsOpen(true);
+        try {
+          const res = await api.get(`/search?q=${encodeURIComponent(query.trim())}&type=users`);
+          setSuggestions((res.data?.users || []).slice(0, 6));
+        } catch (error) {
+          setSuggestions([]);
+        } finally {
+          setSuggestionsLoading(false);
+        }
+      } else {
+        setSuggestionsOpen(false);
+        setSuggestions([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, searchQuery]);
+
   const handleSearch = (e) => {
     e.preventDefault();
     if (query.trim().length < 2) return toast.error("Enter at least 2 characters");
+    setSuggestionsOpen(false);
     setSearchParams({ q: query.trim() });
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Escape") {
+      setSuggestionsOpen(false);
+    }
   };
 
   const clearFilters = () => setFilters({ skills: "", location: "", company: "" });
@@ -137,31 +184,100 @@ export default function SearchPage() {
   const resultMap = { users, jobs, posts };
   const results   = resultMap[activeTab] || [];
 
+  // Highlight matched text in name
+  const highlightMatch = (text, matchStr) => {
+    if (!matchStr || !text) return text;
+    const regex = new RegExp(`(${matchStr})`, "gi");
+    const parts = text.split(regex);
+    return parts.map((part, i) =>
+      regex.test(part) ? (
+        <mark key={i} className="bg-primary-50 text-primary font-semibold not-italic">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  };
+
   return (
     <MainLayout>
       <div className="max-w-[720px] mx-auto space-y-4">
-        {/* Search bar */}
-        <form onSubmit={handleSearch} className="relative">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search people, jobs, posts..."
-            className="w-full pl-11 pr-28 py-3 text-sm bg-white border border-surface-border rounded-card shadow-card focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary transition-all"
-          />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowFilters((p) => !p)}
-              className="flex items-center gap-1"
-            >
-              <Filter size={14} /> Filters
-            </Button>
-            <Button type="submit" variant="primary" size="sm">Search</Button>
-          </div>
-        </form>
+        {/* Search bar wrapper with ref */}
+        <div ref={suggestionsRef} className="relative">
+          <form onSubmit={handleSearch} className="relative z-10">
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onFocus={() => { if (query.trim().length >= 2 && query !== searchQuery) setSuggestionsOpen(true); }}
+              placeholder="Search people, jobs, posts..."
+              className="w-full pl-11 pr-28 py-3 text-sm bg-white border border-surface-border rounded-card shadow-card focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary transition-all"
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowFilters((p) => !p)}
+                className="flex items-center gap-1"
+              >
+                <Filter size={14} /> Filters
+              </Button>
+              <Button type="submit" variant="primary" size="sm">Search</Button>
+            </div>
+          </form>
+
+          {/* Live search suggestions dropdown */}
+          {suggestionsOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-card-hover border border-surface-border z-50 max-h-[320px] overflow-y-auto">
+              {suggestionsLoading ? (
+                <div className="py-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="animate-pulse h-12 bg-gray-100 rounded-lg mx-3 my-1" />
+                  ))}
+                </div>
+              ) : suggestions.length === 0 ? (
+                <div className="px-4 py-3 text-sm text-gray-400">
+                  No users found for '{query}'
+                </div>
+              ) : (
+                <div className="py-2">
+                  {suggestions.map((user) => (
+                    <div
+                      key={user._id}
+                      onClick={() => {
+                        navigate(`/profile/${user.username || user._id}`);
+                        setQuery(user.name);
+                        setSuggestionsOpen(false);
+                      }}
+                      className="flex items-center justify-between hover:bg-gray-50 cursor-pointer px-4 py-3 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <Avatar src={user.profilePic} name={user.name} size="sm" />
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm text-gray-900 truncate flex items-center gap-1">
+                            {highlightMatch(user.name, query.trim())}
+                            {user.username && (
+                              <span className="text-xs text-gray-400 font-normal">@{user.username}</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">{user.headline}</p>
+                        </div>
+                      </div>
+                      {user.location && (
+                        <div className="flex items-center gap-1 text-xs text-gray-400 shrink-0 ml-3">
+                          <MapPin size={10} /> {user.location}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Filters panel */}
         {showFilters && (

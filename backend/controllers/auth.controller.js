@@ -26,9 +26,30 @@ const generateUsername = async (name) => {
     return username;
 };
 
+// GET /api/auth/check-username?username=QUERY  (PUBLIC)
+export const checkUsernameAvailability = async (req, res) => {
+    const { username } = req.query;
+
+    if (!username || username.length < 3)
+        return res.status(400).json({ available: false, message: "Username must be at least 3 characters" });
+
+    const clean = username.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+
+    if (!clean)
+        return res.status(400).json({ available: false, message: "Invalid username format" });
+
+    const exists = await User.exists({ username: clean });
+
+    res.json({
+        available: !exists,
+        username: clean,
+        message: exists ? "Username is taken" : "Username is available",
+    });
+};
+
 // POST /api/auth/register
 export const register = async (req, res) => {
-    const { name, email, password } = req.body;
+    const { name, email, password, username } = req.body;
 
     if (!name || !email || !password)
         return res.status(400).json({ success: false, message: "All fields are required" });
@@ -40,8 +61,19 @@ export const register = async (req, res) => {
     if (exists)
         return res.status(400).json({ success: false, message: "Email already registered" });
 
-    const username = await generateUsername(name);
-    const user = await User.create({ name, email, password, username });
+    let finalUsername;
+
+    if (username) {
+        const clean = username.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+        const taken = await User.exists({ username: clean });
+        if (taken)
+            return res.status(400).json({ success: false, message: "Username already taken" });
+        finalUsername = clean;
+    } else {
+        finalUsername = await generateUsername(name);
+    }
+
+    const user = await User.create({ name, email, password, username: finalUsername });
     const token = generateToken(user._id);
 
     res.status(201).json({

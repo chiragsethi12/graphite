@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, AtSign, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
@@ -9,16 +9,82 @@ import toast from "react-hot-toast";
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
+  const [form, setForm] = useState({ name: "", username: "", email: "", password: "", confirm: "" });
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [usernameStatus, setUsernameStatus] = useState("idle"); // "idle" | "checking" | "available" | "taken" | "invalid"
+  const [checkedUsername, setCheckedUsername] = useState("");
+  const debounceRef = useRef(null);
+
   const handleChange = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    const val = form.username;
+    if (val.length < 3) {
+      setUsernameStatus("idle");
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      const clean = val.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+      
+      let isInvalid = false;
+      if (clean !== val.toLowerCase()) {
+        setUsernameStatus("invalid");
+        isInvalid = true;
+      } else {
+        setUsernameStatus("checking");
+      }
+
+      if (!clean) return;
+
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/auth/check-username?username=${clean}`);
+        const data = await res.json();
+        
+        if (data.available) {
+          if (!isInvalid) setUsernameStatus("available");
+          setCheckedUsername(clean);
+        } else {
+          setUsernameStatus("taken");
+          setCheckedUsername(clean);
+        }
+      } catch (err) {
+        setUsernameStatus("idle");
+      }
+    }, 400);
+
+    return () => clearTimeout(debounceRef.current);
+  }, [form.username]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (!form.username.trim()) {
+      setError("Username is required");
+      return;
+    }
+
+    if (usernameStatus === "checking") {
+      setError("Please wait for username check to complete");
+      return;
+    }
+
+    if (usernameStatus === "taken") {
+      setError("Username is already taken");
+      return;
+    }
+
+    if (usernameStatus === "invalid") {
+      setError("Please fix your username format");
+      return;
+    }
+
     if (form.password !== form.confirm) {
       setError("Passwords do not match");
       return;
@@ -29,7 +95,7 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      await register(form.name, form.email, form.password);
+      await register(form.name, form.email, form.password, form.username);
       toast.success("Welcome to Graphite!");
       navigate("/feed");
     } catch (err) {
@@ -79,8 +145,51 @@ export default function RegisterPage() {
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
               )}
+              
               <Input label="Full Name" name="name" type="text" placeholder="Elena Sterling" value={form.name} onChange={handleChange} icon={User} required />
+              
+              <div className="relative flex flex-col gap-1">
+                <label className="text-sm font-medium text-gray-700">Username</label>
+                <div className="relative">
+                  <AtSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    name="username"
+                    type="text"
+                    placeholder="your-username"
+                    value={form.username}
+                    onChange={handleChange}
+                    required
+                    className={`w-full pl-9 pr-24 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                      usernameStatus === "available"
+                        ? "border-green-400 focus:ring-green-200"
+                        : usernameStatus === "taken"
+                        ? "border-red-400 focus:ring-red-200"
+                        : "border-gray-300 focus:ring-primary-300 focus:border-primary"
+                    }`}
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white">
+                    {usernameStatus === "checking" && <Loader2 size={14} className="text-gray-400 animate-spin" />}
+                    {usernameStatus === "available" && (
+                      <>
+                        <CheckCircle2 size={14} className="text-green-500" />
+                        <span className="text-xs text-green-600 font-medium">Available</span>
+                      </>
+                    )}
+                    {usernameStatus === "taken" && (
+                      <>
+                        <XCircle size={14} className="text-red-500" />
+                        <span className="text-xs text-red-500 font-medium">Taken</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {usernameStatus === "available" && <p className="text-xs text-green-600 mt-0.5">✓ @{checkedUsername} is available</p>}
+                {usernameStatus === "taken" && <p className="text-xs text-red-500 mt-0.5">✗ @{checkedUsername} is already taken</p>}
+                {usernameStatus === "invalid" && <p className="text-xs text-gray-400 mt-0.5">Only letters, numbers, - and _ allowed</p>}
+              </div>
+
               <Input label="Email" name="email" type="email" placeholder="you@example.com" value={form.email} onChange={handleChange} icon={Mail} required />
+              
               <div className="relative flex flex-col gap-1">
                 <label className="text-sm font-medium text-gray-700">Password</label>
                 <div className="relative">

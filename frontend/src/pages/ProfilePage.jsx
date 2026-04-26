@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { MapPin, Edit2, BarChart2, Award, Users, Share2, Globe, Copy } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { MapPin, Edit2, BarChart2, Award, Users, Share2, Globe, Copy, UserMinus, UserPlus, Clock, CheckCircle } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/axios';
 import { useAuth } from '../context/AuthContext';
 import useConnectionStatus from '../hooks/useConnectionStatus';
@@ -46,20 +46,10 @@ function ConnectionButton({ userId }) {
   if (status === 'pending_received') {
     return (
       <div className="flex gap-2">
-        <Button
-          variant="primary"
-          size="sm"
-          className="flex-1"
-          onClick={() => respond.mutate('accept')}
-        >
+        <Button variant="primary" size="sm" className="flex-1" onClick={() => respond.mutate('accept')}>
           Accept
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex-1"
-          onClick={() => respond.mutate('reject')}
-        >
+        <Button variant="ghost" size="sm" className="flex-1" onClick={() => respond.mutate('reject')}>
           Decline
         </Button>
       </div>
@@ -67,15 +57,139 @@ function ConnectionButton({ userId }) {
   }
 
   return (
-    <Button
-      variant="primary"
-      fullWidth
-      size="sm"
-      onClick={() => sendRequest.mutate()}
-      loading={sendRequest.isPending}
-    >
+    <Button variant="primary" fullWidth size="sm" onClick={() => sendRequest.mutate()} loading={sendRequest.isPending}>
       Connect
     </Button>
+  );
+}
+
+/* ─── Inline connection status badge for other users' connections list ─── */
+function ConnectionStatusBadge({ userId }) {
+  const { status, sendRequest } = useConnectionStatus(userId);
+
+  if (status === 'self') return null;
+  if (status === 'connected') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-xs font-medium">
+        <CheckCircle size={12} /> Connected
+      </span>
+    );
+  }
+  if (status === 'pending_sent' || status === 'pending_received') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium">
+        <Clock size={12} /> Pending
+      </span>
+    );
+  }
+  return (
+    <button
+      onClick={(e) => { e.preventDefault(); sendRequest.mutate(); }}
+      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-50 text-primary text-xs font-semibold hover:bg-primary-100 transition-colors"
+    >
+      <UserPlus size={12} /> Connect
+    </button>
+  );
+}
+
+/* ─── Connections Tab Content ─── */
+function ConnectionsTab({ profile, isOwner }) {
+  const queryClient = useQueryClient();
+
+  // For own profile, fetch full populated connections via /api/connections
+  const { data: ownConnectionsData, isLoading: ownLoading } = useQuery({
+    queryKey: ['connections'],
+    queryFn: () => api.get('/connections').then((r) => r.data),
+    enabled: isOwner,
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (userId) => api.delete(`/connections/${userId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === 'profile' });
+      toast.success('Connection removed');
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to remove connection'),
+  });
+
+  const connections = isOwner
+    ? (ownConnectionsData?.connections || [])
+    : (profile.connections || []);
+
+  if (isOwner && ownLoading) {
+    return (
+      <Card className="p-6">
+        <div className="space-y-4 animate-pulse">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gray-200 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 bg-gray-200 rounded w-1/3" />
+                <div className="h-2 bg-gray-200 rounded w-1/2" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    );
+  }
+
+  if (connections.length === 0) {
+    return (
+      <Card className="text-center py-12">
+        <Users size={32} className="mx-auto text-gray-300 mb-3" />
+        <p className="text-gray-400 text-sm">No connections yet.</p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="divide-y divide-gray-100">
+        {connections.map((person) => (
+          <div
+            key={person._id}
+            className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+          >
+            <Link
+              to={`/profile/${person.username || person._id}`}
+              className="flex items-center gap-3 min-w-0 flex-1"
+            >
+              <Avatar src={person.profilePic} name={person.name} size="md" />
+              <div className="min-w-0">
+                <p className="font-semibold text-sm text-gray-900 truncate">{person.name}</p>
+                {person.headline && (
+                  <p className="text-xs text-gray-500 truncate max-w-[220px]">{person.headline}</p>
+                )}
+                {person.location && (
+                  <p className="flex items-center gap-1 text-[11px] text-gray-400 mt-0.5">
+                    <MapPin size={10} /> {person.location}
+                  </p>
+                )}
+              </div>
+            </Link>
+
+            <div className="flex-shrink-0 ml-3">
+              {isOwner ? (
+                <button
+                  onClick={() => {
+                    if (confirm(`Remove ${person.name} from connections?`)) {
+                      removeMutation.mutate(person._id);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <UserMinus size={13} /> Remove
+                </button>
+              ) : (
+                <ConnectionStatusBadge userId={person._id} />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -83,6 +197,7 @@ export default function ProfilePage() {
   const { id } = useParams();
   const { user: me } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('about');
 
   const { data, isLoading } = useQuery({
@@ -113,6 +228,7 @@ export default function ProfilePage() {
   const posts = postsData?.posts || [];
   const mutuals = mutualData?.mutuals || [];
   const isOwner = me?._id === profile?._id;
+  const connectionCount = stats?.connectionCount ?? profile?.connections?.length ?? 0;
 
   // If route used a raw Mongo ObjectId, redirect to canonical username URL when available
   useEffect(() => {
@@ -150,6 +266,12 @@ export default function ProfilePage() {
         <div className="text-center py-20 text-gray-400">Profile not found.</div>
       </MainLayout>
     );
+
+  const tabs = [
+    { key: 'about', label: 'About' },
+    { key: 'posts', label: 'Posts' },
+    { key: 'connections', label: 'Connections', count: connectionCount },
+  ];
 
   return (
     <MainLayout>
@@ -194,18 +316,14 @@ export default function ProfilePage() {
                 )}
 
                 <div className="border-t border-gray-100 mt-4 pt-4 flex justify-around">
-                  <div>
-                    <p className="font-bold text-gray-900">
-                      {stats?.connectionCount ?? profile.connections?.length ?? 0}
-                    </p>
+                  <button onClick={() => setActiveTab('connections')} className="hover:opacity-80 transition-opacity">
+                    <p className="font-bold text-gray-900">{connectionCount}</p>
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide">Connections</p>
-                  </div>
+                  </button>
                   <div className="w-px bg-gray-100" />
                   <div>
                     <p className="font-bold text-gray-900">{stats?.profileViews ?? 0}</p>
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">
-                      Profile Views
-                    </p>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Profile Views</p>
                   </div>
                   <div className="w-px bg-gray-100" />
                   <div>
@@ -279,9 +397,7 @@ export default function ProfilePage() {
               <Card className="p-4 border-amber-200">
                 <div className="flex items-center gap-2 mb-1">
                   <Award size={16} className="text-amber-500" />
-                  <p className="text-sm font-semibold text-gray-800">
-                    Skill Score: {stats.skillScore}
-                  </p>
+                  <p className="text-sm font-semibold text-gray-800">Skill Score: {stats.skillScore}</p>
                 </div>
                 <p className="text-xs text-gray-500 leading-relaxed">
                   Your engagement-based ranking. Post, comment, and get likes to increase it.
@@ -294,17 +410,26 @@ export default function ProfilePage() {
           <div className="flex-1 min-w-0 flex flex-col gap-4">
             {/* Tabs */}
             <div className="flex gap-1 border-b border-gray-200">
-              {['about', 'posts'].map((tab) => (
+              {tabs.map((tab) => (
                 <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${
-                    activeTab === tab
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                    activeTab === tab.key
                       ? 'border-primary text-primary'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  {tab}
+                  {tab.label}
+                  {tab.count !== undefined && (
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold ${
+                      activeTab === tab.key
+                        ? 'bg-primary-50 text-primary'
+                        : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -334,21 +459,9 @@ export default function ProfilePage() {
                   </Card>
                 )}
 
-                <ExperienceSection
-                  experiences={profile.experience || []}
-                  isOwner={isOwner}
-                  userId={profile._id}
-                />
-                <EducationSection
-                  educations={profile.education || []}
-                  isOwner={isOwner}
-                  userId={profile._id}
-                />
-                <SkillsSection
-                  skills={profile.skills || []}
-                  isOwner={isOwner}
-                  userId={profile._id}
-                />
+                <ExperienceSection experiences={profile.experience || []} isOwner={isOwner} userId={profile._id} />
+                <EducationSection educations={profile.education || []} isOwner={isOwner} userId={profile._id} />
+                <SkillsSection skills={profile.skills || []} isOwner={isOwner} userId={profile._id} />
               </>
             )}
 
@@ -360,6 +473,10 @@ export default function ProfilePage() {
                   posts.map((post) => <PostCard key={post._id} post={post} />)
                 )}
               </div>
+            )}
+
+            {activeTab === 'connections' && (
+              <ConnectionsTab profile={profile} isOwner={isOwner} />
             )}
           </div>
         </div>
