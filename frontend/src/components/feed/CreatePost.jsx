@@ -39,13 +39,25 @@ export default function CreatePost() {
     onError: (err) => toast.error(err.message || "Failed to publish post"),
   });
 
-  const handleImageChange = (e) => {
+  const handleFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image must be under 5MB");
+
+    // 1. Type check
+    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+    if (!allowed.includes(file.type)) {
+      toast.error("Only JPEG, PNG, WebP, and GIF images are allowed");
+      e.target.value = "";   // reset input
       return;
     }
+
+    // 2. Size check (10MB = 10 * 1024 * 1024 bytes)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image must be under 10MB");
+      e.target.value = "";   // reset input
+      return;
+    }
+
     setImage(file);
     setPreview(URL.createObjectURL(file));
   };
@@ -69,6 +81,11 @@ export default function CreatePost() {
             rows={isExpanded ? 4 : 2}
             className="w-full text-sm text-gray-800 placeholder-gray-400 resize-none focus:outline-none leading-relaxed"
           />
+          {content.length > 200 && (
+            <p className={`text-[10px] text-right mt-0.5 ${content.length > 2800 ? "text-red-500" : "text-gray-400"}`}>
+              {content.length}/3000
+            </p>
+          )}
 
           {preview && (
             <div className="relative mt-2 rounded-xl overflow-hidden">
@@ -100,9 +117,9 @@ export default function CreatePost() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
                   className="hidden"
-                  onChange={handleImageChange}
+                  onChange={handleFile}
                 />
               </div>
 
@@ -121,7 +138,13 @@ export default function CreatePost() {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => mutation.mutate()}
+                  onClick={() => {
+                    if (content.trim().length > 3000) {
+                      toast.error("Post content must be under 3000 characters");
+                      return;
+                    }
+                    mutation.mutate();
+                  }}
                   loading={mutation.isPending}
                   disabled={!content.trim() && !image}
                 >

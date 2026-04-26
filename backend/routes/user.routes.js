@@ -10,7 +10,7 @@ import {
   updatePrivacy,
 } from '../controllers/user.controller.js';
 import protect from '../middleware/auth.middleware.js';
-import { upload } from '../config/cloudinary.js';
+import { upload, handleMulterError } from '../config/cloudinary.js';
 
 const router = express.Router();
 
@@ -24,6 +24,7 @@ router.put(
     { name: 'profilePic', maxCount: 1 },
     { name: 'bannerPic', maxCount: 1 },
   ]),
+  handleMulterError,
   updateProfile
 );
 // Backwards-compatible alias: frontend expects `/users/profile`
@@ -34,6 +35,7 @@ router.put(
     { name: 'profilePic', maxCount: 1 },
     { name: 'bannerPic', maxCount: 1 },
   ]),
+  handleMulterError,
   updateProfile
 );
 router.put('/change-password', protect, changePassword);

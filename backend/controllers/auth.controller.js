@@ -54,10 +54,22 @@ export const register = async (req, res) => {
     if (!name || !email || !password)
         return res.status(400).json({ success: false, message: "All fields are required" });
 
+    if (name.trim().length < 2)
+        return res.status(400).json({ success: false, message: "Name must be at least 2 characters" });
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+        return res.status(400).json({ success: false, message: "Please enter a valid email address" });
+
     if (password.length < 6)
         return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
 
-    const exists = await User.findOne({ email });
+    if (password.length > 128)
+        return res.status(400).json({ success: false, message: "Password is too long" });
+
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    const exists = await User.findOne({ email: cleanEmail });
     if (exists)
         return res.status(400).json({ success: false, message: "Email already registered" });
 
@@ -65,15 +77,20 @@ export const register = async (req, res) => {
 
     if (username) {
         const clean = username.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+        if (clean.length < 3)
+            return res.status(400).json({ success: false, message: "Username must be at least 3 characters" });
+        if (clean.length > 30)
+            return res.status(400).json({ success: false, message: "Username must be under 30 characters" });
+        
         const taken = await User.exists({ username: clean });
         if (taken)
             return res.status(400).json({ success: false, message: "Username already taken" });
         finalUsername = clean;
     } else {
-        finalUsername = await generateUsername(name);
+        finalUsername = await generateUsername(cleanName);
     }
 
-    const user = await User.create({ name, email, password, username: finalUsername });
+    const user = await User.create({ name: cleanName, email: cleanEmail, password, username: finalUsername });
     const token = generateToken(user._id);
 
     res.status(201).json({
@@ -97,7 +114,12 @@ export const login = async (req, res) => {
     if (!email || !password)
         return res.status(400).json({ success: false, message: "All fields are required" });
 
-    const user = await User.findOne({ email });
+    if (password.length > 128)
+        return res.status(400).json({ success: false, message: "Invalid credentials" });
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    const user = await User.findOne({ email: cleanEmail });
     if (!user || !(await user.matchPassword(password)))
         return res.status(401).json({ success: false, message: "Invalid credentials" });
 

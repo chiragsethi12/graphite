@@ -1,11 +1,11 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Bell, Check, CheckCheck, Trash2, Heart, MessageCircle, UserPlus, UserCheck, Share2, Briefcase } from "lucide-react";
+import { Bell, Check, Trash2, Heart, MessageCircle, UserPlus, UserCheck, Share2, Briefcase } from "lucide-react";
 import api from "../lib/axios";
 import { useAuth } from "../context/AuthContext";
 import MainLayout from "../components/layout/MainLayout";
 import Avatar from "../components/ui/Avatar";
-import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import toast from "react-hot-toast";
 
@@ -118,19 +118,26 @@ export default function NotificationsPage() {
     },
   });
 
-  const markAllReadMutation = useMutation({
-    mutationFn: () => api.put("/notifications/read-all"),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      clearNotificationCount();
-      toast.success("All marked as read");
-    },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: (id) => api.delete(`/notifications/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
+
+  useEffect(() => {
+    // Auto-mark all as read when the page is visited
+    // Only fire if there are unread notifications (avoid unnecessary API calls)
+    const markRead = async () => {
+      try {
+        await api.put("/notifications/read-all");
+        clearNotificationCount();
+        // Silently refresh the list so read states update without a toast
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      } catch {
+        // Silently fail — this is a background UX operation, not critical
+      }
+    };
+    markRead();
+  }, [clearNotificationCount, queryClient]);
 
   const notifications = data?.notifications || [];
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -145,16 +152,6 @@ export default function NotificationsPage() {
               <p className="text-sm text-gray-500 mt-0.5">{unreadCount} unread</p>
             )}
           </div>
-          {unreadCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => markAllReadMutation.mutate()}
-              className="flex items-center gap-1.5"
-            >
-              <CheckCheck size={14} /> Mark all read
-            </Button>
-          )}
         </div>
 
         {isLoading ? (

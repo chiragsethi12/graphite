@@ -12,13 +12,13 @@ import {
     deletePost,
 } from "../controllers/post.controller.js";
 import protect from "../middleware/auth.middleware.js";
-import { upload } from "../config/cloudinary.js";
+import { upload, handleMulterError } from "../config/cloudinary.js";
 
 const router = express.Router();
 
 router.get("/feed",                      protect, getFeed);
 router.get("/trending",                  protect, getTrendingPosts);
-router.post("/create",                   protect, upload.single("image"), createPost);
+router.post("/create",                   protect, upload.single("image"), handleMulterError, createPost);
 router.get("/:id",                       protect, getPostById);
 router.put("/:id/like",                  protect, likePost);
 router.post("/:id/comment",             protect, commentOnPost);
