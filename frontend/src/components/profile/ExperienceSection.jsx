@@ -1,24 +1,42 @@
 import { useState } from 'react';
-import { Briefcase, Plus, X } from 'lucide-react';
+import { Briefcase, Plus, X, Edit2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/axios';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import toast from 'react-hot-toast';
 
-function ExperienceItem({ exp }) {
-  const duration = [exp.startDate, exp.endDate || 'Present'].join(' - ');
+function ExperienceItem({ exp, isLast }) {
+  const duration = [exp.startDate, exp.endDate || 'Present'].join(' – ');
+  const isCurrent = !exp.endDate || exp.endDate === 'Present';
+
   return (
-    <div className="flex gap-4">
-      <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-        <Briefcase size={16} className="text-primary" />
+    <div className="flex gap-4 relative">
+      {/* Timeline line */}
+      {!isLast && (
+        <div className="absolute left-[22px] top-[52px] bottom-0 w-px bg-gray-100" />
+      )}
+
+      {/* Logo / icon */}
+      <div className="relative z-10 flex-shrink-0">
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${
+          isCurrent ? 'bg-primary-50 ring-2 ring-primary-100' : 'bg-gray-50 border border-gray-100'
+        }`}>
+          <Briefcase size={18} className={isCurrent ? 'text-primary' : 'text-gray-400'} />
+        </div>
       </div>
-      <div className="flex-1 min-w-0 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
-        <p className="font-semibold text-gray-900">{exp.title}</p>
-        <p className="text-sm text-gray-500">{exp.company} · Full-time</p>
-        <p className="text-xs text-gray-400 mt-0.5">{duration}</p>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 pb-6">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h4 className="font-semibold text-gray-900 text-[15px] leading-tight">{exp.title}</h4>
+            <p className="text-sm text-gray-600 mt-0.5">{exp.company} · Full-time</p>
+            <p className="text-xs text-gray-400 mt-1">{duration}</p>
+          </div>
+        </div>
         {exp.description && (
-          <p className="text-sm text-gray-600 mt-2 leading-relaxed">{exp.description}</p>
+          <p className="text-sm text-gray-500 mt-3 leading-relaxed">{exp.description}</p>
         )}
       </div>
     </div>
@@ -39,7 +57,6 @@ export default function ExperienceSection({ experiences = [], isOwner = false, u
   const addMutation = useMutation({
     mutationFn: () => api.put('/users/profile', { experience: [...experiences, form] }),
     onSuccess: () => {
-      // Ensure profile cache refreshed regardless of query key (id or username)
       queryClient.invalidateQueries({
         predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === 'profile',
       });
@@ -51,21 +68,28 @@ export default function ExperienceSection({ experiences = [], isOwner = false, u
   });
 
   return (
-    <div className="bg-white rounded-card shadow-card border border-surface-border p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-gray-900 text-base">Experience</h3>
-        {isOwner && (
-          <button
-            onClick={() => setOpen((p) => !p)}
-            className="p-1 text-gray-400 hover:text-primary"
-          >
-            {open ? <X size={18} /> : <Plus size={18} />}
-          </button>
-        )}
+    <div className="bg-white rounded-2xl shadow-card border border-surface-border p-6 md:p-7">
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-lg font-bold text-gray-900">Experience</h2>
+        <div className="flex items-center gap-1">
+          {isOwner && (
+            <>
+              <button
+                onClick={() => setOpen((p) => !p)}
+                className="p-2 rounded-xl text-gray-400 hover:text-primary hover:bg-primary-50/50 transition-all"
+              >
+                {open ? <X size={16} /> : <Plus size={16} />}
+              </button>
+              <button className="p-2 rounded-xl text-gray-400 hover:text-primary hover:bg-primary-50/50 transition-all">
+                <Edit2 size={16} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {open && (
-        <div className="mb-4 p-4 bg-gray-50 rounded-xl flex flex-col gap-3">
+        <div className="mb-6 p-5 bg-gray-50/80 rounded-xl border border-gray-100 flex flex-col gap-3.5">
           <Input
             label="Title"
             value={form.title}
@@ -96,20 +120,25 @@ export default function ExperienceSection({ experiences = [], isOwner = false, u
             label="Description"
             value={form.description}
             onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-            placeholder="Brief description..."
+            placeholder="Brief description of your role…"
           />
-          <Button size="sm" onClick={() => addMutation.mutate()} loading={addMutation.isPending}>
-            Save
-          </Button>
+          <div className="flex justify-end gap-2 mt-1">
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={() => addMutation.mutate()} loading={addMutation.isPending}>
+              Save
+            </Button>
+          </div>
         </div>
       )}
 
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col">
         {experiences.map((exp, i) => (
-          <ExperienceItem key={i} exp={exp} />
+          <ExperienceItem key={i} exp={exp} isLast={i === experiences.length - 1} />
         ))}
         {experiences.length === 0 && (
-          <p className="text-sm text-gray-400">No experience added yet.</p>
+          <p className="text-sm text-gray-400 italic">
+            {isOwner ? 'Add your professional experience to stand out.' : 'No experience added yet.'}
+          </p>
         )}
       </div>
     </div>

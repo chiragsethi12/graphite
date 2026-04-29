@@ -1,83 +1,113 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { MapPin, Edit2, BarChart2, Award, Users, Share2, Globe, Copy, UserMinus, UserPlus, Clock, CheckCircle, Eye } from 'lucide-react';
+import { MapPin, Users, UserPlus, Clock, CheckCircle, UserMinus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/axios';
 import { useAuth } from '../context/AuthContext';
 import useConnectionStatus from '../hooks/useConnectionStatus';
 import MainLayout from '../components/layout/MainLayout';
+
+// Profile components
+import ProfileHeader from '../components/profile/ProfileHeader';
+import AboutSection from '../components/profile/AboutSection';
+import ActivitySection from '../components/profile/ActivitySection';
 import ExperienceSection from '../components/profile/ExperienceSection';
 import EducationSection from '../components/profile/EducationSection';
 import SkillsSection from '../components/profile/SkillsSection';
-import ProfileCompletionCard from '../components/profile/ProfileCompletionCard';
-import PostCard from '../components/feed/PostCard';
+import ProfileSidebar from '../components/profile/ProfileSidebar';
+
+// UI
 import Avatar from '../components/ui/Avatar';
-import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import ConfirmAction from '../components/ui/ConfirmDialog';
-import { ProfileSidebarSkeleton, ProfileContentSkeleton } from '../components/ui/SkeletonScreens';
-import formatRelativeTime from '../utils/formatRelativeTime';
 import toast from 'react-hot-toast';
 
-function ConnectionButton({ userId }) {
-  const { status, sendRequest, withdraw, respond, remove } = useConnectionStatus(userId);
-
-  if (status === 'self') return null;
-
-  if (status === 'connected') {
-    return (
-      <ConfirmAction
-        onConfirm={() => remove.mutate()}
-        message="Remove connection?"
-        confirmLabel="Remove"
-      >
-        {(requestConfirm) => (
-          <Button variant="outline" fullWidth size="sm" onClick={requestConfirm}>
-            ✓ Connected
-          </Button>
-        )}
-      </ConfirmAction>
-    );
-  }
-
-  if (status === 'pending_sent') {
-    return (
-      <ConfirmAction
-        onConfirm={() => withdraw.mutate()}
-        message="Withdraw request?"
-        confirmLabel="Withdraw"
-        variant="warning"
-      >
-        {(requestConfirm) => (
-          <Button variant="ghost" fullWidth size="sm" onClick={requestConfirm}>
-            Pending · Withdraw
-          </Button>
-        )}
-      </ConfirmAction>
-    );
-  }
-
-  if (status === 'pending_received') {
-    return (
-      <div className="flex gap-2">
-        <Button variant="primary" size="sm" className="flex-1" onClick={() => respond.mutate('accept')}>
-          Accept
-        </Button>
-        <Button variant="ghost" size="sm" className="flex-1" onClick={() => respond.mutate('reject')}>
-          Decline
-        </Button>
-      </div>
-    );
-  }
-
+/* ─── Shimmer Skeleton ─────────────────────────────────────────── */
+function Shimmer({ className = '' }) {
   return (
-    <Button variant="primary" fullWidth size="sm" onClick={() => sendRequest.mutate()} loading={sendRequest.isPending}>
-      Connect
-    </Button>
+    <div className={`relative overflow-hidden bg-gray-200/70 rounded ${className}`} style={{ isolation: 'isolate' }}>
+      <div
+        className="absolute inset-0 -translate-x-full"
+        style={{
+          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent)',
+          animation: 'shimmer 1.8s ease-in-out infinite',
+        }}
+      />
+    </div>
   );
 }
 
-/* ─── Inline connection status badge for other users' connections list ─── */
+function ProfileSkeleton() {
+  return (
+    <div className="max-w-[1024px] mx-auto space-y-4">
+      {/* Hero skeleton */}
+      <div className="bg-white rounded-2xl shadow-card border border-surface-border overflow-hidden">
+        <Shimmer className="h-48 md:h-56 w-full rounded-none" />
+        <div className="px-8 pb-6 flex gap-5">
+          <div className="-mt-16 md:-mt-20 flex-shrink-0">
+            <Shimmer className="w-32 h-32 md:w-36 md:h-36 rounded-full ring-[5px] ring-white" />
+          </div>
+          <div className="flex-1 pt-4 space-y-3">
+            <Shimmer className="h-7 w-52 rounded-md" />
+            <Shimmer className="h-4 w-80 rounded-md" />
+            <Shimmer className="h-3.5 w-40 rounded-md" />
+            <Shimmer className="h-3 w-24 rounded-md" />
+            <div className="flex gap-3 pt-3">
+              <Shimmer className="h-10 w-28 rounded-full" />
+              <Shimmer className="h-10 w-24 rounded-full" />
+              <Shimmer className="h-10 w-20 rounded-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Content skeleton */}
+      <div className="flex gap-4">
+        <div className="flex-1 space-y-4">
+          <div className="bg-white rounded-2xl shadow-card border border-surface-border p-7 space-y-4">
+            <Shimmer className="h-5 w-16 rounded-md" />
+            <Shimmer className="h-3 w-full rounded-md" />
+            <Shimmer className="h-3 w-5/6 rounded-md" />
+            <Shimmer className="h-3 w-4/6 rounded-md" />
+          </div>
+          <div className="bg-white rounded-2xl shadow-card border border-surface-border p-7 space-y-4">
+            <Shimmer className="h-5 w-24 rounded-md" />
+            <div className="flex gap-4">
+              <Shimmer className="w-11 h-11 rounded-xl flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Shimmer className="h-4 w-44 rounded-md" />
+                <Shimmer className="h-3 w-36 rounded-md" />
+                <Shimmer className="h-2.5 w-24 rounded-md" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="w-[300px] hidden lg:block space-y-4">
+          <div className="bg-white rounded-2xl shadow-card border border-surface-border p-5 space-y-3">
+            <Shimmer className="h-4 w-32 rounded-md" />
+            <Shimmer className="h-9 w-full rounded-xl" />
+          </div>
+          <div className="bg-white rounded-2xl shadow-card border border-surface-border p-5 space-y-3">
+            <Shimmer className="h-4 w-36 rounded-md" />
+            <div className="space-y-2.5">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Shimmer className="w-8 h-8 rounded-full" />
+                  <div className="flex-1 space-y-1.5">
+                    <Shimmer className="h-3 w-24 rounded-md" />
+                    <Shimmer className="h-2.5 w-32 rounded-md" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Connection Status Badge (for connections tab) ───────────── */
 function ConnectionStatusBadge({ userId }) {
   const { status, sendRequest } = useConnectionStatus(userId);
 
@@ -106,78 +136,7 @@ function ConnectionStatusBadge({ userId }) {
   );
 }
 
-/* ─── Profile Viewers Widget ─── */
-function ProfileViewersWidget({ profile, stats }) {
-  // Filter views from the last 7 days
-  const weeklyViews = useMemo(() => {
-    if (!profile.profileViewHistory?.length) return [];
-    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    return profile.profileViewHistory.filter(
-      (v) => v.viewedAt && new Date(v.viewedAt).getTime() > weekAgo
-    );
-  }, [profile.profileViewHistory]);
-
-  const recentViewers = useMemo(() => {
-    if (!profile.profileViewHistory?.length) return [];
-    return profile.profileViewHistory
-      .slice()
-      .reverse()
-      .filter((v) => v.viewerId)
-      .slice(0, 5);
-  }, [profile.profileViewHistory]);
-
-  if (!profile.profileViewHistory?.length) return null;
-
-  const latestViewer = recentViewers[0]?.viewerId;
-  const othersCount = Math.max(0, (stats?.profileViews || profile.profileViewHistory.length) - 1);
-
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <Eye size={16} className="text-primary" />
-        <p className="text-sm font-semibold text-gray-800">Who viewed your profile</p>
-      </div>
-
-      {/* Avatar stack */}
-      {recentViewers.length > 0 && (
-        <div className="flex -space-x-2 overflow-hidden mb-2">
-          {recentViewers.map((view, i) => (
-            view.viewerId && (
-              <Link
-                key={i}
-                to={`/profile/${view.viewerId.username || view.viewerId._id}`}
-                className="inline-block ring-2 ring-white rounded-full hover:z-10 transition-transform hover:scale-110"
-              >
-                <Avatar src={view.viewerId.profilePic} name={view.viewerId.name} size="xs" />
-              </Link>
-            )
-          ))}
-        </div>
-      )}
-
-      {/* Summary text */}
-      <p className="text-xs text-gray-500 leading-snug mt-2">
-        Viewed by{' '}
-        {latestViewer && (
-          <Link
-            to={`/profile/${latestViewer.username || latestViewer._id}`}
-            className="font-semibold text-gray-700 hover:text-primary transition-colors"
-          >
-            {latestViewer.name}
-          </Link>
-        )}
-        {othersCount > 0 && (
-          <span> and <span className="font-semibold text-gray-700">{othersCount} other{othersCount !== 1 ? 's' : ''}</span></span>
-        )}
-        {weeklyViews.length > 0 && (
-          <span className="text-gray-400"> · {weeklyViews.length} this week</span>
-        )}
-      </p>
-    </Card>
-  );
-}
-
-/* ─── Connections Tab Content ─── */
+/* ─── Connections Tab ──────────────────────────────────────────── */
 function ConnectionsTab({ profile, isOwner }) {
   const queryClient = useQueryClient();
 
@@ -203,7 +162,7 @@ function ConnectionsTab({ profile, isOwner }) {
 
   if (isOwner && ownLoading) {
     return (
-      <Card className="p-6">
+      <div className="bg-white rounded-2xl shadow-card border border-surface-border p-6">
         <div className="space-y-4 animate-pulse">
           {[1, 2, 3].map((i) => (
             <div key={i} className="flex items-center gap-3">
@@ -215,36 +174,33 @@ function ConnectionsTab({ profile, isOwner }) {
             </div>
           ))}
         </div>
-      </Card>
+      </div>
     );
   }
 
   if (connections.length === 0) {
     return (
-      <Card className="text-center py-12">
-        <Users size={32} className="mx-auto text-gray-300 mb-3" />
+      <div className="bg-white rounded-2xl shadow-card border border-surface-border text-center py-14">
+        <Users size={36} className="mx-auto text-gray-300 mb-3" />
         <p className="text-gray-400 text-sm">No connections yet.</p>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card className="overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-card border border-surface-border overflow-hidden">
       <div className="divide-y divide-gray-100">
         {connections.map((person) => (
-          <div
-            key={person._id}
-            className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-          >
+          <div key={person._id} className="flex items-center justify-between px-5 py-4 hover:bg-gray-50/50 transition-colors">
             <Link
               to={`/profile/${person.username || person._id}`}
-              className="flex items-center gap-3 min-w-0 flex-1"
+              className="flex items-center gap-3.5 min-w-0 flex-1"
             >
               <Avatar src={person.profilePic} name={person.name} size="md" />
               <div className="min-w-0">
                 <p className="font-semibold text-sm text-gray-900 truncate">{person.name}</p>
                 {person.headline && (
-                  <p className="text-xs text-gray-500 truncate max-w-[220px]">{person.headline}</p>
+                  <p className="text-xs text-gray-500 truncate max-w-[240px]">{person.headline}</p>
                 )}
                 {person.location && (
                   <p className="flex items-center gap-1 text-[11px] text-gray-400 mt-0.5">
@@ -253,7 +209,6 @@ function ConnectionsTab({ profile, isOwner }) {
                 )}
               </div>
             </Link>
-
             <div className="flex-shrink-0 ml-3">
               {isOwner ? (
                 <ConfirmAction
@@ -264,7 +219,7 @@ function ConnectionsTab({ profile, isOwner }) {
                   {(requestConfirm) => (
                     <button
                       onClick={requestConfirm}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                     >
                       <UserMinus size={13} /> Remove
                     </button>
@@ -277,15 +232,36 @@ function ConnectionsTab({ profile, isOwner }) {
           </div>
         ))}
       </div>
-    </Card>
+    </div>
   );
 }
 
+/* ─── Interests Section ───────────────────────────────────────── */
+function InterestsSection({ interests }) {
+  if (!interests?.length) return null;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-card border border-surface-border p-6 md:p-7">
+      <h2 className="text-lg font-bold text-gray-900 mb-4">Interests</h2>
+      <div className="flex flex-wrap gap-2.5">
+        {interests.map((interest) => (
+          <span
+            key={interest}
+            className="text-sm px-4 py-2 bg-primary-50/60 text-primary rounded-full font-medium border border-primary-100 hover:bg-primary-50 transition-colors cursor-default"
+          >
+            {interest}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main Page ────────────────────────────────────────────────── */
 export default function ProfilePage() {
   const { id } = useParams();
   const { user: me } = useAuth();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('about');
 
   const { data, isLoading } = useQuery({
@@ -299,12 +275,6 @@ export default function ProfilePage() {
     enabled: !!data?.user?._id,
   });
 
-  const { data: postsData } = useQuery({
-    queryKey: ['userPosts', data?.user?._id],
-    queryFn: () => api.get(`/users/${data.user._id}/posts`).then((r) => r.data),
-    enabled: !!data?.user?._id && activeTab === 'posts',
-  });
-
   const { data: mutualData } = useQuery({
     queryKey: ['mutuals', data?.user?._id],
     queryFn: () => api.get(`/connections/mutual/${data.user._id}`).then((r) => r.data),
@@ -313,12 +283,11 @@ export default function ProfilePage() {
 
   const profile = data?.user;
   const stats = statsData?.stats;
-  const posts = postsData?.posts || [];
   const mutuals = mutualData?.mutuals || [];
   const isOwner = me?._id === profile?._id;
   const connectionCount = stats?.connectionCount ?? profile?.connections?.length ?? 0;
 
-  // If route used a raw Mongo ObjectId, redirect to canonical username URL when available
+  // Redirect ObjectId URLs to username
   useEffect(() => {
     if (!isLoading && profile) {
       const isObjectId = /^[a-f\d]{24}$/i.test(id);
@@ -328,255 +297,105 @@ export default function ProfilePage() {
     }
   }, [isLoading, profile, id, navigate]);
 
-  const handleShareProfile = () => {
-    const url = `${window.location.origin}/profile/${profile.username || profile._id}`;
-    navigator.clipboard.writeText(url);
-    toast.success('Profile link copied!');
-  };
-
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="max-w-[960px] mx-auto">
-          <div className="flex flex-col lg:flex-row gap-4 items-start">
-            <div className="w-full lg:w-[280px] flex-shrink-0">
-              <ProfileSidebarSkeleton />
+        <ProfileSkeleton />
+      </MainLayout>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <MainLayout>
+        <div className="max-w-[1024px] mx-auto">
+          <div className="text-center py-24">
+            <div className="w-20 h-20 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+              <Users size={32} className="text-gray-300" />
             </div>
-            <div className="flex-1 min-w-0">
-              <ProfileContentSkeleton />
-            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Profile not found</h2>
+            <p className="text-sm text-gray-400">This user may have been removed or the link is incorrect.</p>
           </div>
         </div>
       </MainLayout>
     );
   }
 
-  if (!profile)
-    return (
-      <MainLayout>
-        <div className="text-center py-20 text-gray-400">Profile not found.</div>
-      </MainLayout>
-    );
-
   const tabs = [
     { key: 'about', label: 'About' },
-    { key: 'posts', label: 'Posts' },
+    { key: 'activity', label: 'Activity' },
     { key: 'connections', label: 'Connections', count: connectionCount },
   ];
 
   return (
     <MainLayout>
-      <div className="max-w-[960px] mx-auto">
+      <div className="max-w-[1024px] mx-auto space-y-4">
+        {/* ── Hero Card (Full Width) ─────────────────────── */}
+        <ProfileHeader profile={profile} stats={stats} isOwner={isOwner} />
+
+        {/* ── Two Column Layout ──────────────────────────── */}
         <div className="flex flex-col lg:flex-row gap-4 items-start">
-          {/* LEFT: Profile summary card */}
-          <div className="w-full lg:w-[280px] flex-shrink-0 flex flex-col gap-4">
-            <Card className="overflow-hidden">
-              {/* Banner */}
-              <div
-                className="h-24 bg-primary-900 relative"
-                style={{
-                  backgroundImage: profile.bannerPic ? `url(${profile.bannerPic})` : undefined,
-                  backgroundSize: 'cover',
-                }}
-              >
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2">
-                  <div className="ring-4 ring-white rounded-full">
-                    <Avatar src={profile.profilePic} name={profile.name} size="xl" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-12 pb-5 px-5 text-center">
-                <h2 className="font-bold text-gray-900 text-lg">{profile.name}</h2>
-                {profile.username && <p className="text-xs text-gray-400">@{profile.username}</p>}
-                <p className="text-sm text-gray-500 mt-0.5">{profile.headline}</p>
-                {profile.location && (
-                  <p className="flex items-center justify-center gap-1 text-xs text-gray-400 mt-1.5">
-                    <MapPin size={12} /> {profile.location}
-                  </p>
-                )}
-                {profile.website && (
-                  <a
-                    href={profile.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-1 text-xs text-primary mt-1 hover:underline"
-                  >
-                    <Globe size={11} /> Website
-                  </a>
-                )}
-
-                <div className="border-t border-gray-100 mt-4 pt-4 flex justify-around">
-                  <button onClick={() => setActiveTab('connections')} className="hover:opacity-80 transition-opacity">
-                    <p className="font-bold text-gray-900">{connectionCount}</p>
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Connections</p>
-                  </button>
-                  <div className="w-px bg-gray-100" />
-                  <div>
-                    <p className="font-bold text-gray-900">{stats?.profileViews ?? 0}</p>
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Profile Views</p>
-                  </div>
-                  <div className="w-px bg-gray-100" />
-                  <div>
-                    <p className="font-bold text-gray-900">{stats?.postCount ?? 0}</p>
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Posts</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-2">
-                  {isOwner ? (
-                    <>
-                      <Button
-                        variant="primary"
-                        fullWidth
-                        size="sm"
-                        className="flex items-center gap-2 justify-center"
-                        onClick={() => navigate('/settings')}
-                      >
-                        <Edit2 size={14} /> Edit Profile
-                      </Button>
-                      <Button
-                        variant="outline"
-                        fullWidth
-                        size="sm"
-                        className="flex items-center gap-2 justify-center"
-                        onClick={() => navigate('/activity')}
-                      >
-                        <BarChart2 size={14} /> View Analytics
-                      </Button>
-                    </>
-                  ) : (
-                    <ConnectionButton userId={profile._id} />
-                  )}
-                  <Button
-                    variant="ghost"
-                    fullWidth
-                    size="sm"
-                    className="flex items-center gap-2 justify-center"
-                    onClick={handleShareProfile}
-                  >
-                    <Copy size={14} /> Share Profile
-                  </Button>
-                </div>
-              </div>
-            </Card>
-
-            {/* Profile Completion (owner only) */}
-            {isOwner && <ProfileCompletionCard profile={profile} />}
-
-            {/* Mutual connections */}
-            {!isOwner && mutuals.length > 0 && (
-              <Card className="p-4">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  <Users size={12} className="inline mr-1" />
-                  {mutualData?.count} Mutual Connection{mutualData?.count !== 1 ? 's' : ''}
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {mutuals.slice(0, 6).map((m) => (
-                    <Link
-                      key={m._id}
-                      to={`/profile/${m.username || m._id}`}
-                      className="flex items-center gap-2 hover:bg-gray-50 rounded-lg p-1.5 transition-colors"
-                    >
-                      <Avatar src={m.profilePic} name={m.name} size="xs" />
-                      <span className="text-xs text-gray-700">{m.name}</span>
-                    </Link>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {/* Skill score */}
-            {isOwner && stats?.skillScore > 0 && (
-              <Card className="p-4 border-amber-200">
-                <div className="flex items-center gap-2 mb-1">
-                  <Award size={16} className="text-amber-500" />
-                  <p className="text-sm font-semibold text-gray-800">Skill Score: {stats.skillScore}</p>
-                </div>
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  Your engagement-based ranking. Post, comment, and get likes to increase it.
-                </p>
-              </Card>
-            )}
-
-            {/* Profile Views Widget */}
-            {isOwner && (
-              <ProfileViewersWidget profile={profile} stats={stats} />
-            )}
-          </div>
-
-          {/* RIGHT: Content sections */}
-          <div className="flex-1 min-w-0 flex flex-col gap-4">
-            {/* Tabs */}
-            <div className="flex gap-1 border-b border-gray-200">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
-                    activeTab === tab.key
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {tab.label}
-                  {tab.count !== undefined && (
-                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold ${
+          {/* Left: Main content */}
+          <div className="flex-1 min-w-0 space-y-4">
+            {/* Nav tabs */}
+            <div className="bg-white rounded-2xl shadow-card border border-surface-border px-2">
+              <div className="flex gap-1">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`px-5 py-3.5 text-sm font-semibold border-b-[3px] transition-all flex items-center gap-2 ${
                       activeTab === tab.key
-                        ? 'bg-primary-50 text-primary'
-                        : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              ))}
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {tab.label}
+                    {tab.count !== undefined && (
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
+                        activeTab === tab.key
+                          ? 'bg-primary-50 text-primary'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
 
+            {/* About tab */}
             {activeTab === 'about' && (
               <>
-                <Card className="p-5">
-                  <h3 className="font-bold text-gray-900 text-base mb-3">About</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
-                    {profile.about || profile.bio || 'No bio added yet.'}
-                  </p>
-                </Card>
-
-                {profile.interests?.length > 0 && (
-                  <Card className="p-5">
-                    <h3 className="font-bold text-gray-900 text-base mb-3">Interests</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {profile.interests.map((interest) => (
-                        <span
-                          key={interest}
-                          className="text-xs px-3 py-1.5 bg-primary-50 text-primary rounded-full font-medium"
-                        >
-                          {interest}
-                        </span>
-                      ))}
-                    </div>
-                  </Card>
-                )}
-
+                <AboutSection about={profile.about || profile.bio} isOwner={isOwner} />
                 <ExperienceSection experiences={profile.experience || []} isOwner={isOwner} userId={profile._id} />
                 <EducationSection educations={profile.education || []} isOwner={isOwner} userId={profile._id} />
                 <SkillsSection skills={profile.skills || []} isOwner={isOwner} userId={profile._id} />
+                <InterestsSection interests={profile.interests} />
               </>
             )}
 
-            {activeTab === 'posts' && (
-              <div className="space-y-4">
-                {posts.length === 0 ? (
-                  <Card className="text-center py-10 text-gray-400 text-sm">No posts yet.</Card>
-                ) : (
-                  posts.map((post) => <PostCard key={post._id} post={post} />)
-                )}
-              </div>
+            {/* Activity tab */}
+            {activeTab === 'activity' && (
+              <ActivitySection userId={profile._id} isOwner={isOwner} userName={profile.name} />
             )}
 
+            {/* Connections tab */}
             {activeTab === 'connections' && (
               <ConnectionsTab profile={profile} isOwner={isOwner} />
             )}
+          </div>
+
+          {/* Right: Sidebar */}
+          <div className="w-full lg:w-[300px] flex-shrink-0">
+            <ProfileSidebar
+              profile={profile}
+              stats={stats}
+              isOwner={isOwner}
+              mutuals={mutuals}
+              mutualCount={mutualData?.count}
+            />
           </div>
         </div>
       </div>
