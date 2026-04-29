@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/axios';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
+import ConfirmAction from '../ui/ConfirmDialog';
 import toast from 'react-hot-toast';
 
 export default function SkillsSection({ skills = [], isOwner = false, userId }) {
@@ -76,12 +77,20 @@ export default function SkillsSection({ skills = [], isOwner = false, userId }) 
           <div key={skill} className="flex items-center gap-1 group">
             <Badge variant="skill">{skill}</Badge>
             {isOwner && open && (
-              <button
-                onClick={() => handleRemove(skill)}
-                className="text-gray-300 hover:text-red-500 transition-colors"
+              <ConfirmAction
+                onConfirm={() => handleRemove(skill)}
+                message={`Remove "${skill}"?`}
+                confirmLabel="Remove"
               >
-                <X size={12} />
-              </button>
+                {(requestConfirm) => (
+                  <button
+                    onClick={requestConfirm}
+                    className="text-gray-300 hover:text-red-500 transition-colors"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </ConfirmAction>
             )}
           </div>
         ))}

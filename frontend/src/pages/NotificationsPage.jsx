@@ -7,19 +7,10 @@ import { useAuth } from "../context/AuthContext";
 import MainLayout from "../components/layout/MainLayout";
 import Avatar from "../components/ui/Avatar";
 import Card from "../components/ui/Card";
+import ConfirmAction from "../components/ui/ConfirmDialog";
+import { NotificationSkeleton } from "../components/ui/SkeletonScreens";
+import formatRelativeTime from "../utils/formatRelativeTime";
 import toast from "react-hot-toast";
-
-function timeAgo(dateStr) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
-}
 
 const typeIcons = {
   like: Heart,
@@ -77,7 +68,7 @@ function NotificationItem({ notification, onMarkRead, onDelete }) {
         <p className={`text-sm leading-snug ${notification.read ? "text-gray-600" : "text-gray-900 font-medium"}`}>
           {notification.message}
         </p>
-        <p className="text-xs text-gray-400 mt-0.5">{timeAgo(notification.createdAt)}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{formatRelativeTime(notification.createdAt)}</p>
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
@@ -90,13 +81,21 @@ function NotificationItem({ notification, onMarkRead, onDelete }) {
             <Check size={14} />
           </button>
         )}
-        <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(notification._id); }}
-          className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-          title="Delete"
+        <ConfirmAction
+          onConfirm={() => onDelete(notification._id)}
+          message="Delete?"
+          confirmLabel="Yes"
         >
-          <Trash2 size={14} />
-        </button>
+          {(requestConfirm) => (
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); requestConfirm(); }}
+              className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+              title="Delete"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </ConfirmAction>
       </div>
     </Wrapper>
   );
@@ -123,17 +122,15 @@ export default function NotificationsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
+  // Auto-mark all as read when page is visited
   useEffect(() => {
-    // Auto-mark all as read when the page is visited
-    // Only fire if there are unread notifications (avoid unnecessary API calls)
     const markRead = async () => {
       try {
         await api.patch("/notifications/mark-all-read");
         clearNotificationCount();
-        // Silently refresh the list so read states update without a toast
         queryClient.invalidateQueries({ queryKey: ["notifications"] });
       } catch {
-        // Silently fail — this is a background UX operation, not critical
+        // Silently fail — background UX operation
       }
     };
     markRead();
@@ -155,25 +152,17 @@ export default function NotificationsPage() {
         </div>
 
         {isLoading ? (
-          <Card className="divide-y divide-gray-100">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="p-4 animate-pulse flex gap-3">
-                <div className="w-10 h-10 bg-gray-200 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3 bg-gray-200 rounded w-3/4" />
-                  <div className="h-2 bg-gray-200 rounded w-1/4" />
-                </div>
-              </div>
-            ))}
-          </Card>
+          <NotificationSkeleton count={5} />
         ) : notifications.length === 0 ? (
           <Card className="text-center py-16 text-gray-400">
-            <Bell size={36} className="mx-auto mb-3 text-gray-300" />
-            <p className="font-medium text-gray-900">No notifications yet</p>
+            <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Bell size={28} className="text-gray-300" />
+            </div>
+            <p className="font-semibold text-gray-900">No notifications yet</p>
             <p className="text-sm mt-1">When someone interacts with you, you'll see it here</p>
           </Card>
         ) : (
-          <Card className="divide-y divide-gray-100 overflow-hidden">
+          <Card className="divide-y divide-gray-100 overflow-hidden" padding={false}>
             {notifications.map((n) => (
               <NotificationItem
                 key={n._id}

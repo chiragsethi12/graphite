@@ -6,6 +6,8 @@ import MainLayout from "../components/layout/MainLayout";
 import Avatar from "../components/ui/Avatar";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
+import ConfirmAction from "../components/ui/ConfirmDialog";
+import { ConnectionCardSkeleton } from "../components/ui/SkeletonScreens";
 import toast from "react-hot-toast";
 
 function PersonCard({ person, onConnect, loading }) {
@@ -76,12 +78,21 @@ function SentCard({ conn, onWithdraw }) {
           <p className="text-xs text-gray-500">{recipient?.headline}</p>
         </div>
       </Link>
-      <button
-        onClick={() => onWithdraw(recipient._id)}
-        className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-xs font-medium hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+      <ConfirmAction
+        onConfirm={() => onWithdraw(recipient._id)}
+        message="Withdraw request?"
+        confirmLabel="Withdraw"
+        variant="warning"
       >
-        <X size={13} /> Withdraw
-      </button>
+        {(requestConfirm) => (
+          <button
+            onClick={requestConfirm}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-xs font-medium hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+          >
+            <X size={13} /> Withdraw
+          </button>
+        )}
+      </ConfirmAction>
     </div>
   );
 }
@@ -198,7 +209,7 @@ export default function NetworkPage() {
           {suggestionsLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="bg-white rounded-card h-48 animate-pulse shadow-card border border-surface-border" />
+                <ConnectionCardSkeleton key={i} />
               ))}
             </div>
           ) : suggestions.length === 0 ? (

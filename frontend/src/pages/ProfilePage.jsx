@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { MapPin, Edit2, BarChart2, Award, Users, Share2, Globe, Copy, UserMinus, UserPlus, Clock, CheckCircle } from 'lucide-react';
+import { MapPin, Edit2, BarChart2, Award, Users, Share2, Globe, Copy, UserMinus, UserPlus, Clock, CheckCircle, Eye } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/axios';
 import { useAuth } from '../context/AuthContext';
@@ -9,10 +9,14 @@ import MainLayout from '../components/layout/MainLayout';
 import ExperienceSection from '../components/profile/ExperienceSection';
 import EducationSection from '../components/profile/EducationSection';
 import SkillsSection from '../components/profile/SkillsSection';
+import ProfileCompletionCard from '../components/profile/ProfileCompletionCard';
 import PostCard from '../components/feed/PostCard';
 import Avatar from '../components/ui/Avatar';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import ConfirmAction from '../components/ui/ConfirmDialog';
+import { ProfileSidebarSkeleton, ProfileContentSkeleton } from '../components/ui/SkeletonScreens';
+import formatRelativeTime from '../utils/formatRelativeTime';
 import toast from 'react-hot-toast';
 
 function ConnectionButton({ userId }) {
@@ -22,24 +26,34 @@ function ConnectionButton({ userId }) {
 
   if (status === 'connected') {
     return (
-      <Button
-        variant="outline"
-        fullWidth
-        size="sm"
-        onClick={() => {
-          if (confirm('Remove this connection?')) remove.mutate();
-        }}
+      <ConfirmAction
+        onConfirm={() => remove.mutate()}
+        message="Remove connection?"
+        confirmLabel="Remove"
       >
-        ✓ Connected
-      </Button>
+        {(requestConfirm) => (
+          <Button variant="outline" fullWidth size="sm" onClick={requestConfirm}>
+            ✓ Connected
+          </Button>
+        )}
+      </ConfirmAction>
     );
   }
 
   if (status === 'pending_sent') {
     return (
-      <Button variant="ghost" fullWidth size="sm" onClick={() => withdraw.mutate()}>
-        Pending · Withdraw
-      </Button>
+      <ConfirmAction
+        onConfirm={() => withdraw.mutate()}
+        message="Withdraw request?"
+        confirmLabel="Withdraw"
+        variant="warning"
+      >
+        {(requestConfirm) => (
+          <Button variant="ghost" fullWidth size="sm" onClick={requestConfirm}>
+            Pending · Withdraw
+          </Button>
+        )}
+      </ConfirmAction>
     );
   }
 
@@ -92,11 +106,81 @@ function ConnectionStatusBadge({ userId }) {
   );
 }
 
+/* ─── Profile Viewers Widget ─── */
+function ProfileViewersWidget({ profile, stats }) {
+  // Filter views from the last 7 days
+  const weeklyViews = useMemo(() => {
+    if (!profile.profileViewHistory?.length) return [];
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return profile.profileViewHistory.filter(
+      (v) => v.viewedAt && new Date(v.viewedAt).getTime() > weekAgo
+    );
+  }, [profile.profileViewHistory]);
+
+  const recentViewers = useMemo(() => {
+    if (!profile.profileViewHistory?.length) return [];
+    return profile.profileViewHistory
+      .slice()
+      .reverse()
+      .filter((v) => v.viewerId)
+      .slice(0, 5);
+  }, [profile.profileViewHistory]);
+
+  if (!profile.profileViewHistory?.length) return null;
+
+  const latestViewer = recentViewers[0]?.viewerId;
+  const othersCount = Math.max(0, (stats?.profileViews || profile.profileViewHistory.length) - 1);
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Eye size={16} className="text-primary" />
+        <p className="text-sm font-semibold text-gray-800">Who viewed your profile</p>
+      </div>
+
+      {/* Avatar stack */}
+      {recentViewers.length > 0 && (
+        <div className="flex -space-x-2 overflow-hidden mb-2">
+          {recentViewers.map((view, i) => (
+            view.viewerId && (
+              <Link
+                key={i}
+                to={`/profile/${view.viewerId.username || view.viewerId._id}`}
+                className="inline-block ring-2 ring-white rounded-full hover:z-10 transition-transform hover:scale-110"
+              >
+                <Avatar src={view.viewerId.profilePic} name={view.viewerId.name} size="xs" />
+              </Link>
+            )
+          ))}
+        </div>
+      )}
+
+      {/* Summary text */}
+      <p className="text-xs text-gray-500 leading-snug mt-2">
+        Viewed by{' '}
+        {latestViewer && (
+          <Link
+            to={`/profile/${latestViewer.username || latestViewer._id}`}
+            className="font-semibold text-gray-700 hover:text-primary transition-colors"
+          >
+            {latestViewer.name}
+          </Link>
+        )}
+        {othersCount > 0 && (
+          <span> and <span className="font-semibold text-gray-700">{othersCount} other{othersCount !== 1 ? 's' : ''}</span></span>
+        )}
+        {weeklyViews.length > 0 && (
+          <span className="text-gray-400"> · {weeklyViews.length} this week</span>
+        )}
+      </p>
+    </Card>
+  );
+}
+
 /* ─── Connections Tab Content ─── */
 function ConnectionsTab({ profile, isOwner }) {
   const queryClient = useQueryClient();
 
-  // For own profile, fetch full populated connections via /api/connections
   const { data: ownConnectionsData, isLoading: ownLoading } = useQuery({
     queryKey: ['connections'],
     queryFn: () => api.get('/connections').then((r) => r.data),
@@ -172,16 +256,20 @@ function ConnectionsTab({ profile, isOwner }) {
 
             <div className="flex-shrink-0 ml-3">
               {isOwner ? (
-                <button
-                  onClick={() => {
-                    if (confirm(`Remove ${person.name} from connections?`)) {
-                      removeMutation.mutate(person._id);
-                    }
-                  }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                <ConfirmAction
+                  onConfirm={() => removeMutation.mutate(person._id)}
+                  message={`Remove ${person.name}?`}
+                  confirmLabel="Remove"
                 >
-                  <UserMinus size={13} /> Remove
-                </button>
+                  {(requestConfirm) => (
+                    <button
+                      onClick={requestConfirm}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <UserMinus size={13} /> Remove
+                    </button>
+                  )}
+                </ConfirmAction>
               ) : (
                 <ConnectionStatusBadge userId={person._id} />
               )}
@@ -249,11 +337,14 @@ export default function ProfilePage() {
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="max-w-[960px] mx-auto animate-pulse space-y-4">
-          <div className="h-32 bg-gray-200 rounded-card" />
-          <div className="flex gap-4">
-            <div className="w-1/3 h-64 bg-gray-200 rounded-card" />
-            <div className="flex-1 h-64 bg-gray-200 rounded-card" />
+        <div className="max-w-[960px] mx-auto">
+          <div className="flex flex-col lg:flex-row gap-4 items-start">
+            <div className="w-full lg:w-[280px] flex-shrink-0">
+              <ProfileSidebarSkeleton />
+            </div>
+            <div className="flex-1 min-w-0">
+              <ProfileContentSkeleton />
+            </div>
           </div>
         </div>
       </MainLayout>
@@ -370,6 +461,9 @@ export default function ProfilePage() {
               </div>
             </Card>
 
+            {/* Profile Completion (owner only) */}
+            {isOwner && <ProfileCompletionCard profile={profile} />}
+
             {/* Mutual connections */}
             {!isOwner && mutuals.length > 0 && (
               <Card className="p-4">
@@ -405,27 +499,9 @@ export default function ProfilePage() {
               </Card>
             )}
 
-            {/* Profile Views */}
-            {isOwner && profile.profileViewHistory?.length > 0 && (
-              <Card className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <BarChart2 size={16} className="text-primary" />
-                  <p className="text-sm font-semibold text-gray-800">Who viewed your profile</p>
-                </div>
-                <div className="flex -space-x-2 overflow-hidden mb-2">
-                  {profile.profileViewHistory.slice().reverse().slice(0, 5).map((view, i) => (
-                    view.viewerId && (
-                      <Link key={i} to={`/profile/${view.viewerId.username || view.viewerId._id}`} className="inline-block ring-2 ring-white rounded-full">
-                        <Avatar src={view.viewerId.profilePic} name={view.viewerId.name} size="xs" />
-                      </Link>
-                    )
-                  ))}
-                </div>
-                <p className="text-xs text-gray-500 leading-snug mt-2">
-                  Viewed by <span className="font-medium text-gray-700">{profile.profileViewHistory[profile.profileViewHistory.length - 1]?.viewerId?.name}</span>
-                  {stats?.profileViews > 1 && ` and ${stats.profileViews - 1} others`}
-                </p>
-              </Card>
+            {/* Profile Views Widget */}
+            {isOwner && (
+              <ProfileViewersWidget profile={profile} stats={stats} />
             )}
           </div>
 

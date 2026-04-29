@@ -9,21 +9,11 @@ import api from "../../lib/axios";
 import { useAuth } from "../../context/AuthContext";
 import Avatar from "../ui/Avatar";
 import Button from "../ui/Button";
+import ConfirmAction from "../ui/ConfirmDialog";
+import formatRelativeTime from "../../utils/formatRelativeTime";
 import toast from "react-hot-toast";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function timeAgo(dateStr) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
-}
 
 function formatText(text) {
   if (!text) return null;
@@ -74,7 +64,7 @@ function Comment({ comment, postId, onReply }) {
           <p className="text-sm text-gray-700 mt-0.5 leading-relaxed">{comment.text}</p>
         </div>
         <div className="flex items-center gap-3 mt-1 px-1">
-          <span className="text-[10px] text-gray-400">{timeAgo(comment.createdAt)}</span>
+          <span className="text-[10px] text-gray-400">{formatRelativeTime(comment.createdAt)}</span>
           <button
             onClick={() => onReply(comment)}
             className="text-[10px] font-semibold text-gray-500 hover:text-primary transition-colors"
@@ -82,14 +72,20 @@ function Comment({ comment, postId, onReply }) {
             Reply
           </button>
           {isOwner && (
-            <button
-              onClick={() => {
-                if (confirm("Delete this comment?")) deleteMutation.mutate();
-              }}
-              className="text-[10px] font-semibold text-red-400 hover:text-red-600 transition-colors"
+            <ConfirmAction
+              onConfirm={() => deleteMutation.mutate()}
+              message="Delete comment?"
+              confirmLabel="Delete"
             >
-              Delete
-            </button>
+              {(requestConfirm) => (
+                <button
+                  onClick={requestConfirm}
+                  className="text-[10px] font-semibold text-red-400 hover:text-red-600 transition-colors"
+                >
+                  Delete
+                </button>
+              )}
+            </ConfirmAction>
           )}
         </div>
 
@@ -253,19 +249,25 @@ export default function PostCard({ post: initialPost }) {
                 {post.author?.name}
               </p>
               <p className="text-xs text-gray-500 line-clamp-1">{post.author?.headline}</p>
-              <p className="text-[10px] text-gray-400 mt-0.5">{timeAgo(post.createdAt)}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{formatRelativeTime(post.createdAt)}</p>
             </div>
           </Link>
 
           {isOwner && (
-            <button
-              onClick={() => {
-                if (confirm("Delete this post?")) deleteMutation.mutate();
-              }}
-              className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+            <ConfirmAction
+              onConfirm={() => deleteMutation.mutate()}
+              message="Delete this post?"
+              confirmLabel="Delete"
             >
-              <Trash2 size={15} />
-            </button>
+              {(requestConfirm) => (
+                <button
+                  onClick={requestConfirm}
+                  className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
+            </ConfirmAction>
           )}
         </div>
 
@@ -312,7 +314,7 @@ export default function PostCard({ post: initialPost }) {
                 {post.sharedPost.author?.name}
               </span>
               <span className="text-[10px] text-gray-400">
-                · {timeAgo(post.sharedPost.createdAt)}
+                · {formatRelativeTime(post.sharedPost.createdAt)}
               </span>
             </div>
             <div className="p-3">
