@@ -10,7 +10,11 @@ const messageSchema = new mongoose.Schema(
         conversationId: { type: String, required: true, index: true },
         sender:         { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
         recipient:      { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-        content:        { type: String, required: true, trim: true, maxlength: 2000 },
+        content:        { type: String, trim: true, maxlength: 2000, default: "" },
+        attachment:     {
+            url:  { type: String },
+            type: { type: String },  // e.g. "image/jpeg", "image/png"
+        },
         read:           { type: Boolean, default: false },
         readAt:         { type: Date, default: null },
         deleted:        { type: Boolean, default: false },
@@ -18,6 +22,16 @@ const messageSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+// ─── Validators ──────────────────────────────────────────────────────────────
+
+// At least content or attachment must be present
+messageSchema.pre("validate", function (next) {
+    if (!this.content && !this.attachment?.url) {
+        this.invalidate("content", "Message must have content or an attachment");
+    }
+    next();
+});
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,20 @@
 import Message from "../models/Message.model.js";
 import User from "../models/User.model.js";
+import cloudinary from "../config/cloudinary.js";
 import { getReceiverSocketId, io } from "../socket/socket.js";
+
+/**
+ * GET /api/messages/unread-count
+ * Total unread messages across all conversations for the current user.
+ */
+export const getUnreadCount = async (req, res) => {
+    const count = await Message.countDocuments({
+        recipient: req.user._id,
+        read: false,
+        deleted: false,
+    });
+    res.json({ success: true, count });
+};
 
 /**
  * GET /api/messages/conversations
@@ -25,6 +39,7 @@ export const getConversations = async (req, res) => {
             $group: {
                 _id: "$conversationId",
                 lastMessage: { $first: "$content" },
+                lastAttachment: { $first: "$attachment" },
                 lastMessageAt: { $first: "$createdAt" },
                 lastSender: { $first: "$sender" },
                 sender: { $first: "$sender" },
@@ -55,7 +70,6 @@ export const getConversations = async (req, res) => {
     // Determine the "other" participant for each conversation
     const otherUserIds = messages.map((m) => {
         const senderId = m.sender.toString();
-        const recipientId = m.recipient.toString();
         return senderId === userId ? m.recipient : m.sender;
     });
 
@@ -72,6 +86,7 @@ export const getConversations = async (req, res) => {
             _id: m._id,
             participant: participantMap[otherId] || null,
             lastMessage: m.lastMessage,
+            lastAttachment: m.lastAttachment || null,
             lastMessageAt: m.lastMessageAt,
             unread: m.unread,
         };
@@ -117,14 +132,17 @@ export const getMessages = async (req, res) => {
 
 /**
  * POST /api/messages/:userId
- * Send a message to :userId.
+ * Send a message to :userId. Supports optional image attachment via multer.
  */
 export const sendMessage = async (req, res) => {
     const { userId } = req.params;
     const { content } = req.body;
 
-    if (!content?.trim()) {
-        return res.status(400).json({ success: false, message: "Message content is required" });
+    const hasContent = content?.trim();
+    const hasFile = !!req.file;
+
+    if (!hasContent && !hasFile) {
+        return res.status(400).json({ success: false, message: "Message content or image is required" });
     }
 
     // Verify recipient exists
@@ -135,12 +153,23 @@ export const sendMessage = async (req, res) => {
 
     const conversationId = Message.getConversationId(req.user._id, userId);
 
-    const message = await Message.create({
+    const messageData = {
         conversationId,
         sender: req.user._id,
         recipient: userId,
-        content: content.trim(),
-    });
+    };
+
+    if (hasContent) messageData.content = content.trim();
+
+    // If file was uploaded by multer+cloudinary, attach its URL
+    if (hasFile) {
+        messageData.attachment = {
+            url: req.file.path,
+            type: req.file.mimetype,
+        };
+    }
+
+    const message = await Message.create(messageData);
 
     await message.populate("sender", "name username profilePic");
     await message.populate("recipient", "name username profilePic");
@@ -162,10 +191,18 @@ export const markConversationRead = async (req, res) => {
     const { userId } = req.params;
     const conversationId = Message.getConversationId(req.user._id, userId);
 
-    await Message.updateMany(
+    const result = await Message.updateMany(
         { conversationId, recipient: req.user._id, read: false },
         { $set: { read: true, readAt: new Date() } }
     );
+
+    // Notify sender their messages were read
+    if (result.modifiedCount > 0) {
+        const senderSocketId = getReceiverSocketId(userId);
+        if (senderSocketId) {
+            io.to(senderSocketId).emit("messagesRead", { byUserId: req.user._id.toString(), conversationId });
+        }
+    }
 
     res.json({ success: true, message: "Marked as read" });
 };

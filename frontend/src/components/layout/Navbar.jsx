@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Bell, Settings, Search, LogOut, User, ChevronDown, BarChart2 } from "lucide-react";
+import { Bell, Settings, Search, LogOut, User, ChevronDown, BarChart2, MessageSquare } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import Avatar from "../ui/Avatar";
 import toast from "react-hot-toast";
 
 export default function Navbar() {
-  const { user, logout, unreadNotifications } = useAuth();
+  const { user, logout, unreadNotifications, unreadMessages } = useAuth();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -48,6 +48,19 @@ export default function Navbar() {
 
         {/* Right actions */}
         <div className="flex items-center gap-1">
+          {/* Messaging */}
+          <button
+            onClick={() => navigate("/messaging")}
+            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors relative"
+          >
+            <MessageSquare size={18} />
+            {unreadMessages > 0 && (
+              <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 text-[10px] font-bold text-white bg-primary rounded-full flex items-center justify-center">
+                {unreadMessages > 9 ? "9+" : unreadMessages}
+              </span>
+            )}
+          </button>
+
           {/* Notifications */}
           <button
             onClick={() => navigate("/notifications")}

@@ -8,6 +8,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const [onlineUsers, setOnlineUsers] = useState([]);
 
   // Fetch unread notification count
@@ -15,6 +16,14 @@ export function AuthProvider({ children }) {
     try {
       const { data } = await api.get("/notifications/unread-count");
       setUnreadNotifications(data.count);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Fetch unread message count
+  const fetchUnreadMessageCount = useCallback(async () => {
+    try {
+      const { data } = await api.get("/messages/unread-count");
+      setUnreadMessages(data.count);
     } catch { /* ignore */ }
   }, []);
 
@@ -31,9 +40,15 @@ export function AuthProvider({ children }) {
       setOnlineUsers(users);
     });
 
+    // Increment unread messages when a new message arrives
+    socket.on("newMessage", () => {
+      setUnreadMessages((prev) => prev + 1);
+    });
+
     return () => {
       socket.off("newNotification");
       socket.off("onlineUsers");
+      socket.off("newMessage");
     };
   }, []);
 
@@ -49,13 +64,14 @@ export function AuthProvider({ children }) {
       connectSocket(data.user._id);
       setupSocketListeners();
       fetchUnreadCount();
+      fetchUnreadMessageCount();
     } catch {
       localStorage.removeItem("graphite_token");
       setUser(null);
     } finally {
       setLoading(false);
     }
-  }, [setupSocketListeners, fetchUnreadCount]);
+  }, [setupSocketListeners, fetchUnreadCount, fetchUnreadMessageCount]);
 
   useEffect(() => {
     fetchMe();
@@ -64,9 +80,12 @@ export function AuthProvider({ children }) {
   // Poll unread count every 30 seconds as fallback
   useEffect(() => {
     if (!user) return;
-    const interval = setInterval(fetchUnreadCount, 30000);
+    const interval = setInterval(() => {
+      fetchUnreadCount();
+      fetchUnreadMessageCount();
+    }, 30000);
     return () => clearInterval(interval);
-  }, [user, fetchUnreadCount]);
+  }, [user, fetchUnreadCount, fetchUnreadMessageCount]);
 
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
@@ -75,6 +94,7 @@ export function AuthProvider({ children }) {
     connectSocket(data.user._id);
     setupSocketListeners();
     fetchUnreadCount();
+    fetchUnreadMessageCount();
     return data.user;
   };
 
@@ -91,17 +111,20 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("graphite_token");
     setUser(null);
     setUnreadNotifications(0);
+    setUnreadMessages(0);
     setOnlineUsers([]);
     disconnectSocket();
   };
 
   const clearNotificationCount = () => setUnreadNotifications(0);
+  const clearMessageCount = () => setUnreadMessages(0);
 
   return (
     <AuthContext.Provider value={{
       user, setUser, loading,
       login, register, logout,
       unreadNotifications, clearNotificationCount,
+      unreadMessages, clearMessageCount, fetchUnreadMessageCount,
       onlineUsers,
     }}>
       {children}

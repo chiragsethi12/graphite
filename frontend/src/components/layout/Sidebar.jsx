@@ -18,37 +18,43 @@ const navItems = [
 
 export default function Sidebar() {
   const navigate = useNavigate();
-  const { user, unreadNotifications } = useAuth();
+  const { user, unreadNotifications, unreadMessages } = useAuth();
 
   return (
     <aside className="w-[220px] flex-shrink-0 hidden lg:flex flex-col h-screen sticky top-0 bg-white border-r border-surface-border">
       <div className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-1">
         <nav className="flex flex-col gap-0.5">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
-                  isActive
-                    ? "bg-primary-50 text-primary font-semibold"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon size={18} className={isActive ? "text-primary" : "text-gray-500"} />
-                  {label}
-                  {label === "Notifications" && unreadNotifications > 0 && (
-                    <span className="ml-auto min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-primary rounded-full flex items-center justify-center">
-                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                    </span>
-                  )}
-                </>
-              )}
-            </NavLink>
-          ))}
+          {navItems.map(({ to, icon: Icon, label }) => {
+            const badgeCount =
+              label === "Notifications" ? unreadNotifications :
+              label === "Messaging" ? unreadMessages : 0;
+
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
+                    isActive
+                      ? "bg-primary-50 text-primary font-semibold"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon size={18} className={isActive ? "text-primary" : "text-gray-500"} />
+                    {label}
+                    {badgeCount > 0 && (
+                      <span className="ml-auto min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-primary rounded-full flex items-center justify-center">
+                        {badgeCount > 9 ? "9+" : badgeCount}
+                      </span>
+                    )}
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
       </div>
 

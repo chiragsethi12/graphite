@@ -1,4 +1,5 @@
-import { Search } from "lucide-react";
+import { Search, Image } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
 import Avatar from "../ui/Avatar";
 
 function timeLabel(dateStr) {
@@ -36,6 +37,8 @@ export default function ConversationList({
   onSearchChange,
   isLoading,
 }) {
+  const { onlineUsers } = useAuth();
+
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-surface-border">
@@ -64,6 +67,15 @@ export default function ConversationList({
 
         {!isLoading && conversations.map((conv) => {
           const isActive = conv._id === activeId;
+          const participantId = conv.participant?._id;
+          const isOnline = participantId && onlineUsers.includes(participantId);
+
+          // Build last message preview
+          let preview = conv.lastMessage || "";
+          if (!preview && conv.lastAttachment?.url) {
+            preview = "📷 Image";
+          }
+
           return (
             <button
               key={conv._id}
@@ -71,11 +83,16 @@ export default function ConversationList({
               className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors border-l-2 ${isActive ? "border-primary bg-primary-50/50" : "border-transparent"
                 }`}
             >
-              <Avatar
-                src={conv.participant?.profilePic}
-                name={conv.participant?.name}
-                size="md"
-              />
+              <div className="relative flex-shrink-0">
+                <Avatar
+                  src={conv.participant?.profilePic}
+                  name={conv.participant?.name}
+                  size="md"
+                />
+                {isOnline && (
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full" />
+                )}
+              </div>
               <div className="flex-1 min-w-0 text-left">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold text-gray-900 truncate">
@@ -86,11 +103,11 @@ export default function ConversationList({
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 truncate mt-0.5">
-                  {conv.lastMessage}
+                  {preview}
                 </p>
               </div>
               {conv.unread > 0 && (
-                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center">
                   {conv.unread > 9 ? "9+" : conv.unread}
                 </span>
               )}

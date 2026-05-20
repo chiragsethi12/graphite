@@ -34,13 +34,22 @@ export function useMessageThread(userId) {
 
 /**
  * Hook to send a message to a user.
+ * Accepts either a string (text only) or FormData (text + image).
  */
 export function useSendMessage(recipientId) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (content) =>
-            api.post(`/messages/${recipientId}`, { content }).then((r) => r.data),
+        mutationFn: (payload) => {
+            if (payload instanceof FormData) {
+                // Image + optional text — send as multipart
+                return api.post(`/messages/${recipientId}`, payload, {
+                    headers: { "Content-Type": "multipart/form-data" },
+                }).then((r) => r.data);
+            }
+            // Text only
+            return api.post(`/messages/${recipientId}`, { content: payload }).then((r) => r.data);
+        },
         onSuccess: (data) => {
             // Prepend the new message optimistically into the thread cache
             queryClient.setQueryData(["messages", recipientId], (old) => {
