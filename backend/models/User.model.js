@@ -65,9 +65,6 @@ const userSchema = new mongoose.Schema(
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────
 
-// Username lookup (unique constraint creates implicit index, explicit for clarity)
-userSchema.index({ username: 1 });
-
 // Full-text search: name + skills + headline + location
 userSchema.index(
     { name: "text", skills: "text", headline: "text", location: "text" },

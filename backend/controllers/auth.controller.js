@@ -1,5 +1,7 @@
+import crypto from "crypto";
 import User from "../models/User.model.js";
 import generateToken from "../utils/generateToken.js";
+import sendEmail, { buildResetEmail } from "../utils/sendEmail.js";
 
 /**
  * Generate a URL-safe username from a display name.
@@ -143,4 +145,86 @@ export const login = async (req, res) => {
 export const getMe = async (req, res) => {
     // req.user is populated by protect middleware (no password)
     res.json({ success: true, user: req.user });
+};
+
+// POST /api/auth/forgot-password
+export const forgotPassword = async (req, res) => {
+    const { email } = req.body;
+
+    if (!email)
+        return res.status(400).json({ success: false, message: "Email is required" });
+
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: cleanEmail });
+
+    // Always return success to avoid leaking whether an email is registered
+    if (!user) {
+        return res.json({
+            success: true,
+            message: "If an account with that email exists, a reset link has been sent.",
+        });
+    }
+
+    // Generate a raw token and hash it for storage
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    user.resetPasswordToken = hashedToken;
+    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+    await user.save({ validateModifiedOnly: true });
+
+    // Build the reset URL (raw token goes in the email, hashed version in DB)
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
+    const resetUrl = `${clientUrl}/reset-password/${rawToken}`;
+
+    try {
+        await sendEmail({
+            to: user.email,
+            subject: "Reset your Graphite password",
+            html: buildResetEmail(user.name, resetUrl),
+        });
+    } catch (err) {
+        // If email fails, clear the token so the user can retry
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        await user.save({ validateModifiedOnly: true });
+        console.error("Email send error:", err);
+        return res.status(500).json({ success: false, message: "Failed to send reset email. Please try again." });
+    }
+
+    res.json({
+        success: true,
+        message: "If an account with that email exists, a reset link has been sent.",
+    });
+};
+
+// POST /api/auth/reset-password/:token
+export const resetPassword = async (req, res) => {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!password || password.length < 6)
+        return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+
+    if (password.length > 128)
+        return res.status(400).json({ success: false, message: "Password is too long" });
+
+    // Hash the incoming raw token to compare with the stored hash
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await User.findOne({
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user)
+        return res.status(400).json({ success: false, message: "Invalid or expired reset token" });
+
+    // Update password (pre-save hook will hash it)
+    user.password = password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.json({ success: true, message: "Password reset successful. You can now sign in." });
 };

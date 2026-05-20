@@ -120,9 +120,19 @@ export default function ProfileHeader({ profile, stats, isOwner }) {
       {/* ── Profile Info ───────────────────────────────────── */}
       <div className="px-6 md:px-8 pb-6">
         {/* Avatar — overlaps banner */}
-        <div className="-mt-14 md:-mt-16 mb-3 relative z-10">
-          <div className="w-fit ring-4 ring-white rounded-full shadow-lg bg-white">
-            <Avatar src={profile.profilePic} name={profile.name} size="xl" className="!w-28 !h-28 md:!w-32 md:!h-32 text-4xl" />
+        <div className="-mt-16 md:-mt-20 mb-3 relative z-10">
+          <div className="w-32 h-32 rounded-full ring-4 ring-white shadow-lg bg-white overflow-hidden flex items-center justify-center">
+            {profile.profilePic ? (
+              <img
+                src={profile.profilePic}
+                alt={profile.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-4xl font-semibold text-primary">
+                {profile.name?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?'}
+              </span>
+            )}
           </div>
         </div>
 
